@@ -47,12 +47,59 @@ echo "Intervalo: ${INTERVAL_HOURS} horas"
 echo "Espera inicial: ${STARTUP_DELAY} segundos"
 echo
 
-Xvfb :99 -screen 0 1360x900x24 -ac -nolisten tcp >/tmp/xvfb.log 2>&1 &
+echo "Arrancando Xvfb..."
+Xvfb :99 -screen 0 1360x900x24 -ac -nolisten tcp &
+XVFB_PID=$!
+
+sleep 2
+
+if ! kill -0 "$XVFB_PID" 2>/dev/null; then
+    echo "ERROR: Xvfb no ha arrancado"
+    exit 20
+fi
+
+echo "Xvfb OK"
+
+echo "Arrancando Openbox..."
+openbox &
+OPENBOX_PID=$!
+
 sleep 1
-openbox >/tmp/openbox.log 2>&1 &
-x11vnc -display :99 -forever -shared -nopw -rfbport 5900 -localhost >/tmp/x11vnc.log 2>&1 &
-websockify --web=/usr/share/novnc 8099 localhost:5900 >/tmp/novnc.log 2>&1 &
-sleep 1
+
+echo "Arrancando x11vnc..."
+x11vnc \
+    -display :99 \
+    -forever \
+    -shared \
+    -nopw \
+    -rfbport 5900 \
+    -localhost &
+VNC_PID=$!
+
+sleep 2
+
+if ! kill -0 "$VNC_PID" 2>/dev/null; then
+    echo "ERROR: x11vnc no ha arrancado"
+    exit 21
+fi
+
+echo "x11vnc OK"
+
+echo "Arrancando noVNC/websockify..."
+websockify \
+    --web=/usr/share/novnc \
+    8099 \
+    localhost:5900 &
+NOVNC_PID=$!
+
+sleep 2
+
+if ! kill -0 "$NOVNC_PID" 2>/dev/null; then
+    echo "ERROR: websockify no ha arrancado"
+    exit 22
+fi
+
+echo "websockify OK"
 
 if [ "$MODE" = "login" ]; then
     echo "Modo LOGIN."
