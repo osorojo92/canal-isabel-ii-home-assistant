@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.6] - 2026-08-29
+
+### Corregido
+- Reimplementada la integración de noVNC con Home Assistant Ingress.
+- La ruta WebSocket deja de inferirse desde la URL del navegador.
+- Uso del encabezado oficial `X-Ingress-Path` de Home Assistant para construir dinámicamente el endpoint WebSocket correcto.
+- Añadido nginx como proxy frontal para noVNC.
+- Separado el servidor HTTP de noVNC del proxy WebSocket.
+- websockify pasa a ejecutarse internamente en el puerto 6080.
+- nginx expone el puerto 8099 utilizado por Home Assistant Ingress.
+- `mandatory.json` se genera dinámicamente para cada petición utilizando la ruta real de Ingress.
+
+### Técnico
+- Nueva arquitectura: Home Assistant Ingress → nginx → websockify → x11vnc.
+- Eliminados los parches anteriores basados en rutas relativas de noVNC.
+
 ## [1.0.5] - 2026-08-29
 
 ### Corregido
