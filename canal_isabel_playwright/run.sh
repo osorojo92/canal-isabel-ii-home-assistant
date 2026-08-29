@@ -40,7 +40,8 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "================================================"
-echo " Canal Isabel II - Playwright 1.0.0"
+echo " Canal Isabel II - Playwright"
+echo " Versión: ${ADDON_VERSION:-desconocida}"
 echo "================================================"
 echo "Modo: ${MODE}"
 echo "Intervalo: ${INTERVAL_HOURS} horas"

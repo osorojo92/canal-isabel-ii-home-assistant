@@ -6,6 +6,8 @@ FROM mcr.microsoft.com/playwright/python:v1.61.0-noble
 ARG BUILD_VERSION
 ARG BUILD_ARCH
 
+ENV ADDON_VERSION="${BUILD_VERSION}"
+
 LABEL \
     io.hass.version="${BUILD_VERSION}" \
     io.hass.type="app" \
