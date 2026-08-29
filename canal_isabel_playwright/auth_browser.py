@@ -13,12 +13,36 @@ CONFIG_DIR = Path("/config")
 PROFILE_DIR = CONFIG_DIR / "browser_profile"
 STATUS_FILE = Path("/share/canal_estado.json")
 CONSUMO_URL = "https://oficinavirtual.canaldeisabelsegunda.es/group/ovir/consumo"
+SESSION_FILE = CONFIG_DIR / "canal_session.json"
 
 STOP_EVENT = threading.Event()
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 _LOGGER = logging.getLogger("canal-auth")
 
+def save_session(context) -> None:
+    try:
+        state = context.storage_state()
+
+        SESSION_FILE.write_text(
+            json.dumps(
+                state,
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+        _LOGGER.info(
+            "Sesión guardada correctamente: %s cookies",
+            len(state.get("cookies", [])),
+        )
+
+    except Exception as err:
+        _LOGGER.error(
+            "No se pudo guardar la sesión: %s",
+            err,
+        )
 
 def write_status(state: str, message: str) -> None:
     data = {
@@ -95,14 +119,21 @@ def main() -> None:
                     url = page.url.lower()
                     if "/group/ovir/" in url and "/login" not in url:
                         current = "autenticado"
+
                         if current != last_state:
+
                             _LOGGER.info(
-                                "Sesión autenticada detectada. "
-                                "Cambia mode a auto y reinicia el add-on."
+                                "Sesión autenticada detectada."
                             )
+
+                            # IMPORTANTE:
+                            # Guardamos las cookies AHORA.
+                            # No esperamos al cierre de Chromium.
+                            save_session(context)
+
                             write_status(
                                 "autenticado",
-                                "Sesión autenticada. Cambia mode a auto y reinicia el add-on.",
+                                "Sesión autenticada y guardada. Ya puedes cambiar a mode auto.",
                             )
                     else:
                         current = "pendiente"
@@ -115,6 +146,10 @@ def main() -> None:
         finally:
             _LOGGER.info("Cerrando Chromium y guardando el perfil...")
             try:
+                try:
+                    save_session(context)
+                except Exception:
+                    pass
                 context.close()
             except Exception:
                 pass

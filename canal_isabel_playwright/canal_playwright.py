@@ -13,12 +13,52 @@ PROFILE_DIR = CONFIG_DIR / "browser_profile"
 SHARE_DIR = Path("/share")
 CSV_FILE = SHARE_DIR / "canal_consumo_horario.csv"
 STATUS_FILE = SHARE_DIR / "canal_estado.json"
+SESSION_FILE = CONFIG_DIR / "canal_session.json"
 
 CONSUMO_URL = "https://oficinavirtual.canaldeisabelsegunda.es/group/ovir/consumo"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 _LOGGER = logging.getLogger("canal")
 
+def restore_session(context) -> bool:
+    if not SESSION_FILE.exists():
+        _LOGGER.warning(
+            "No existe sesión guardada: %s",
+            SESSION_FILE,
+        )
+        return False
+
+    try:
+        state = json.loads(
+            SESSION_FILE.read_text(
+                encoding="utf-8"
+            )
+        )
+
+        cookies = state.get("cookies", [])
+
+        if not cookies:
+            _LOGGER.warning(
+                "El archivo de sesión no contiene cookies."
+            )
+            return False
+
+        context.add_cookies(cookies)
+
+        _LOGGER.info(
+            "Sesión restaurada: %s cookies cargadas.",
+            len(cookies),
+        )
+
+        return True
+
+    except Exception as err:
+        _LOGGER.error(
+            "No se pudo restaurar la sesión: %s",
+            err,
+        )
+
+        return False
 
 def write_status(state: str, message: str, code: int = 0, csv_bytes: int | None = None) -> None:
     data = {
@@ -139,6 +179,8 @@ def main() -> None:
             accept_downloads=True,
             args=["--no-sandbox", "--disable-dev-shm-usage"],
         )
+
+        restore_session(context)
 
         try:
             page = context.pages[0] if context.pages else context.new_page()

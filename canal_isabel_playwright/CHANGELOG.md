@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.10] - 2026-08-29
+
+### Fixed
+- Corregida la persistencia de la sesión autenticada entre los modos `login` y `auto`.
+- La sesión de Playwright se guarda explícitamente mediante `storage_state` en `/config/canal_session.json`.
+- Las cookies de autenticación se guardan inmediatamente al detectar un inicio de sesión correcto, sin depender del cierre limpio de Chromium.
+- El modo `auto` restaura las cookies almacenadas antes de acceder a Telelecturas.
+- Se mantiene el perfil persistente de Chromium como mecanismo adicional de persistencia.
+- Añadido registro de diagnóstico para indicar el número de cookies guardadas y restauradas.
+
 ## [1.0.9] - 2026-08-29
 
 ### Corregido
