@@ -1,5 +1,5 @@
 name: "Canal Isabel II Playwright"
-version: "1.0.8"
+version: "1.0.9"
 slug: "canal_isabel_playwright"
 description: "Descarga automática de telelecturas del Canal de Isabel II mediante Chromium/Playwright"
 url: "https://github.com/osorojo92/canal-isabel-ii-home-assistant"
@@ -14,7 +14,7 @@ arch:
 
 ingress: true
 ingress_port: 8099
-ingress_entry: "/vnc.html"
+ingress_entry: "/vnc-ha.html"
 panel_icon: "mdi:water"
 panel_title: "Canal Isabel II"
 panel_admin: true

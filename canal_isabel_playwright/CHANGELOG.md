@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.9] - 2026-08-29
+
+### Corregido
+- Configurado `vnc-ha.html` directamente como punto de entrada de Home Assistant Ingress.
+- Evitada la carga accidental de la interfaz estándar `vnc.html` de noVNC.
+- El cliente VNC personalizado pasa a ser la interfaz utilizada directamente por el add-on.
+- Añadido control explícito de caché para evitar reutilizar versiones anteriores de la interfaz.
+
+### Técnico
+- `ingress_entry` cambia de `/vnc.html` a `/vnc-ha.html`.
+- La URL WebSocket se construye exclusivamente mediante el cliente personalizado basado en `RFB`.
+
 ## [1.0.8] - 2026-08-29
 
 ### Corregido
