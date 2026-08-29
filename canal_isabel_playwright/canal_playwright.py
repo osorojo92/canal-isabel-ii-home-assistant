@@ -1,109 +1,63 @@
-from pathlib import Path
-from datetime import datetime
+from __future__ import annotations
+
 import json
+import logging
 import sys
+from datetime import datetime
+from pathlib import Path
 
-from playwright.sync_api import (
-    sync_playwright,
-    TimeoutError as PlaywrightTimeoutError,
-)
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError, sync_playwright
 
-
-# ============================================================
-# CONFIGURACIÓN
-# ============================================================
-
-# /config corresponde al addon_config persistente
 CONFIG_DIR = Path("/config")
-
-# /share es accesible desde Home Assistant
+PROFILE_DIR = CONFIG_DIR / "browser_profile"
 SHARE_DIR = Path("/share")
-
-STATE_FILE = CONFIG_DIR / "canal_state.json"
-
 CSV_FILE = SHARE_DIR / "canal_consumo_horario.csv"
 STATUS_FILE = SHARE_DIR / "canal_estado.json"
 
-BASE_URL = "https://oficinavirtual.canaldeisabelsegunda.es"
-CONSUMO_URL = BASE_URL + "/group/ovir/consumo"
+CONSUMO_URL = "https://oficinavirtual.canaldeisabelsegunda.es/group/ovir/consumo"
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+_LOGGER = logging.getLogger("canal")
 
 
-# ============================================================
-# ESTADO
-# ============================================================
-
-def guardar_estado(
-    estado: str,
-    mensaje: str,
-    codigo: int = 0,
-    csv_bytes: int | None = None,
-):
-    """Guardar estado para que Home Assistant pueda consultarlo."""
-
-    datos = {
-        "estado": estado,
-        "mensaje": mensaje,
-        "codigo": codigo,
+def write_status(state: str, message: str, code: int = 0, csv_bytes: int | None = None) -> None:
+    data = {
+        "estado": state,
+        "mensaje": message,
+        "codigo": code,
         "ultima_ejecucion": datetime.now().astimezone().isoformat(),
+        "modo": "auto",
     }
-
     if csv_bytes is not None:
-        datos["csv_bytes"] = csv_bytes
+        data["csv_bytes"] = csv_bytes
 
     try:
         STATUS_FILE.write_text(
-            json.dumps(
-                datos,
-                ensure_ascii=False,
-                indent=2,
-            ),
+            json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-
     except Exception as err:
-        print(f"AVISO guardando estado: {err}")
+        _LOGGER.warning("No se pudo escribir canal_estado.json: %s", err)
 
 
-def terminar(
-    browser,
-    codigo: int,
-    mensaje: str,
-):
-    """Cerrar Chromium y terminar."""
-
-    print()
-    print(mensaje)
-
-    guardar_estado(
-        estado="error",
-        mensaje=mensaje,
-        codigo=codigo,
-    )
-
-    try:
-        browser.close()
-    except Exception:
-        pass
-
-    sys.exit(codigo)
+def remove_profile_locks() -> None:
+    for name in ("SingletonLock", "SingletonSocket", "SingletonCookie"):
+        path = PROFILE_DIR / name
+        try:
+            if path.exists() or path.is_symlink():
+                path.unlink()
+        except Exception:
+            pass
 
 
-# ============================================================
-# COMPROBACIÓN DE SESIÓN
-# ============================================================
-
-def sesion_valida(page) -> bool:
-    """Comprobar si seguimos en la zona autenticada."""
-
+def session_is_valid(page) -> bool:
     url = page.url.lower()
 
-    if "/group/ovir/" in url:
+    if "/group/ovir/" in url and "/login" not in url:
         return True
 
     try:
-        if page.locator(
-            'input[type="password"]'
-        ).count() > 0:
+        if page.locator('input[type="password"]').count() > 0:
             return False
     except Exception:
         pass
@@ -111,417 +65,170 @@ def sesion_valida(page) -> bool:
     return False
 
 
-# ============================================================
-# PROGRAMA
-# ============================================================
-
-def main():
-
-    print()
-    print("==============================================")
-    print(" CANAL DE ISABEL II - PLAYWRIGHT")
-    print("==============================================")
-    print()
-
-    SHARE_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
+def fail(context, code: int, message: str, auth: bool = False) -> None:
+    _LOGGER.error(message)
+    write_status(
+        "reautenticacion_requerida" if auth else "error",
+        message,
+        code,
     )
+    try:
+        context.close()
+    except Exception:
+        pass
+    raise SystemExit(code)
 
-    CONFIG_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
 
-    # --------------------------------------------------------
-    # Necesitamos una sesión exportada previamente
-    # --------------------------------------------------------
+def select_hourly(page, context) -> None:
+    _LOGGER.info("Buscando selector de periodicidad...")
+    periodicity = page.locator("select#selectPeriodicidad")
 
-    if not STATE_FILE.exists():
+    if periodicity.count() == 0:
+        periodicity = page.locator('select[id*="selectPeriodicidad"]')
 
-        mensaje = (
-            "No existe /config/canal_state.json. "
-            "Es necesario copiar una sesión válida."
-        )
+    if periodicity.count() == 0:
+        fail(context, 40, "No se encuentra el selector de periodicidad.")
 
-        print(mensaje)
+    _LOGGER.info("Selector encontrado. Seleccionando frecuencia HORARIA...")
+    selected = False
 
-        guardar_estado(
-            estado="reautenticacion_requerida",
-            mensaje=mensaje,
-            codigo=10,
-        )
+    try:
+        periodicity.first.select_option(label="Horaria")
+        selected = True
+    except Exception:
+        pass
 
-        sys.exit(10)
-
-    with sync_playwright() as p:
-
-        # ----------------------------------------------------
-        # Chromium headless
-        # ----------------------------------------------------
-
-        browser = p.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-            ],
-        )
-
-        context = browser.new_context(
-            storage_state=str(STATE_FILE),
-            accept_downloads=True,
-        )
-
-        page = context.new_page()
-
-        # ----------------------------------------------------
-        # Abrir Telelecturas
-        # ----------------------------------------------------
-
-        print("Abriendo Telelecturas...")
-
+    if not selected:
         try:
-
-            page.goto(
-                CONSUMO_URL,
-                wait_until="domcontentloaded",
-                timeout=60000,
-            )
-
-            page.wait_for_timeout(4000)
-
-        except PlaywrightTimeoutError:
-
-            terminar(
-                browser,
-                20,
-                "Timeout abriendo la página de consumo.",
-            )
-
-        print(f"URL: {page.url}")
-
-        # ----------------------------------------------------
-        # Sesión
-        # ----------------------------------------------------
-
-        if not sesion_valida(page):
-
-            mensaje = (
-                "La sesión del Canal ha caducado "
-                "o requiere autenticación manual."
-            )
-
-            print(mensaje)
-
-            guardar_estado(
-                estado="reautenticacion_requerida",
-                mensaje=mensaje,
-                codigo=30,
-            )
-
-            browser.close()
-
-            sys.exit(30)
-
-        print("✅ Sesión autenticada")
-
-        # ----------------------------------------------------
-        # Mostrar filtros
-        # ----------------------------------------------------
-
-        print()
-        print("Buscando filtros...")
-
-        try:
-
-            mostrar_filtros = page.get_by_text(
-                "Mostrar filtros",
-                exact=False,
-            )
-
-            if (
-                mostrar_filtros.count() > 0
-                and mostrar_filtros.first.is_visible()
-            ):
-
-                print("Abriendo filtros...")
-
-                mostrar_filtros.first.click()
-
-                page.wait_for_timeout(1000)
-
-        except Exception as err:
-            print(f"Aviso abriendo filtros: {err}")
-
-        # ----------------------------------------------------
-        # Selector periodicidad
-        # ----------------------------------------------------
-
-        print()
-        print("Buscando selector de periodicidad...")
-
-        periodicidad = page.locator(
-            "select#selectPeriodicidad"
-        )
-
-        if periodicidad.count() == 0:
-
-            periodicidad = page.locator(
-                'select[id*="selectPeriodicidad"]'
-            )
-
-        if periodicidad.count() == 0:
-
-            terminar(
-                browser,
-                40,
-                "No se encuentra el selector de periodicidad.",
-            )
-
-        print("✅ Selector encontrado")
-
-        # ----------------------------------------------------
-        # Horaria
-        # ----------------------------------------------------
-
-        print("Seleccionando frecuencia HORARIA...")
-
-        seleccionado = False
-
-        try:
-
-            periodicidad.first.select_option(
-                label="Horaria"
-            )
-
-            seleccionado = True
-
+            periodicity.first.select_option(value="Horaria")
+            selected = True
         except Exception:
             pass
 
-        if not seleccionado:
+    if not selected:
+        options = periodicity.first.locator("option")
+        for index in range(options.count()):
+            option = options.nth(index)
+            text = option.inner_text().strip().lower()
+            if "horaria" in text:
+                value = option.get_attribute("value")
+                periodicity.first.select_option(value=value)
+                selected = True
+                break
+
+    if not selected:
+        fail(context, 41, "Se encontró el selector, pero no la opción Horaria.")
+
+    _LOGGER.info("Frecuencia HORARIA seleccionada.")
+    page.wait_for_timeout(5000)
+
+
+def main() -> None:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    SHARE_DIR.mkdir(parents=True, exist_ok=True)
+    remove_profile_locks()
+
+    with sync_playwright() as p:
+        _LOGGER.info("Abriendo Telelecturas con Chromium headless...")
+
+        context = p.chromium.launch_persistent_context(
+            user_data_dir=str(PROFILE_DIR),
+            headless=True,
+            viewport={"width": 1360, "height": 850},
+            accept_downloads=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
+
+        try:
+            page = context.pages[0] if context.pages else context.new_page()
 
             try:
+                page.goto(CONSUMO_URL, wait_until="domcontentloaded", timeout=60000)
+                page.wait_for_timeout(4000)
+            except PlaywrightTimeoutError:
+                fail(context, 20, "Timeout abriendo la página de consumo.")
 
-                periodicidad.first.select_option(
-                    value="Horaria"
+            _LOGGER.info("URL actual: %s", page.url)
+
+            if not session_is_valid(page):
+                fail(
+                    context,
+                    30,
+                    "La sesión ha caducado o requiere autenticación manual. Cambia mode a login.",
+                    auth=True,
                 )
 
-                seleccionado = True
+            _LOGGER.info("Sesión autenticada.")
 
+            try:
+                show_filters = page.get_by_text("Mostrar filtros", exact=False)
+                if show_filters.count() > 0 and show_filters.first.is_visible():
+                    _LOGGER.info("Abriendo filtros...")
+                    show_filters.first.click()
+                    page.wait_for_timeout(1000)
+            except Exception as err:
+                _LOGGER.warning("No se pudieron abrir los filtros: %s", err)
+
+            select_hourly(page, context)
+
+            if not session_is_valid(page):
+                fail(
+                    context,
+                    31,
+                    "La sesión se perdió al cambiar la periodicidad.",
+                    auth=True,
+                )
+
+            _LOGGER.info("Buscando enlace de exportación CSV...")
+            csv_links = page.locator('a[href*="export-csv"]')
+
+            if csv_links.count() == 0:
+                fail(context, 50, "No se encuentra el enlace de exportación CSV.")
+
+            _LOGGER.info("Enlaces CSV encontrados: %s", csv_links.count())
+
+            if CSV_FILE.exists():
+                try:
+                    CSV_FILE.unlink()
+                except Exception as err:
+                    fail(context, 51, f"No se puede borrar el CSV anterior: {err}")
+
+            _LOGGER.info("Descargando CSV horario...")
+
+            try:
+                with page.expect_download(timeout=60000) as download_info:
+                    csv_links.first.click()
+
+                download = download_info.value
+                download.save_as(str(CSV_FILE))
+            except Exception as err:
+                fail(context, 60, f"Error descargando CSV: {err}")
+
+            if not CSV_FILE.exists():
+                fail(context, 61, "La descarga terminó pero el CSV no existe.")
+
+            size = CSV_FILE.stat().st_size
+            if size == 0:
+                fail(context, 62, "El CSV descargado está vacío.")
+
+            _LOGGER.info("CSV descargado correctamente: %s (%s bytes)", CSV_FILE, size)
+            write_status("ok", "Descarga realizada correctamente.", 0, size)
+            _LOGGER.info("Proceso completado correctamente.")
+
+        finally:
+            try:
+                context.close()
             except Exception:
                 pass
 
-        if not seleccionado:
-
-            options = periodicidad.first.locator(
-                "option"
-            )
-
-            for i in range(options.count()):
-
-                option = options.nth(i)
-
-                texto = (
-                    option.inner_text()
-                    .strip()
-                    .lower()
-                )
-
-                if "horaria" in texto:
-
-                    value = option.get_attribute(
-                        "value"
-                    )
-
-                    periodicidad.first.select_option(
-                        value=value
-                    )
-
-                    seleccionado = True
-
-                    break
-
-        if not seleccionado:
-
-            terminar(
-                browser,
-                41,
-                "No se encuentra la opción Horaria.",
-            )
-
-        print("✅ Frecuencia HORARIA seleccionada")
-
-        page.wait_for_timeout(5000)
-
-        # ----------------------------------------------------
-        # Volvemos a comprobar sesión
-        # ----------------------------------------------------
-
-        if not sesion_valida(page):
-
-            mensaje = (
-                "La sesión se perdió al cambiar "
-                "la periodicidad."
-            )
-
-            guardar_estado(
-                estado="reautenticacion_requerida",
-                mensaje=mensaje,
-                codigo=31,
-            )
-
-            browser.close()
-
-            sys.exit(31)
-
-        # ----------------------------------------------------
-        # CSV
-        # ----------------------------------------------------
-
-        print()
-        print("Buscando exportación CSV...")
-
-        csv_links = page.locator(
-            'a[href*="export-csv"]'
-        )
-
-        if csv_links.count() == 0:
-
-            terminar(
-                browser,
-                50,
-                "No se encuentra el enlace CSV.",
-            )
-
-        print(
-            f"✅ Enlaces CSV encontrados: "
-            f"{csv_links.count()}"
-        )
-
-        csv_link = csv_links.first
-
-        # ----------------------------------------------------
-        # Borrar CSV anterior
-        # ----------------------------------------------------
-
-        if CSV_FILE.exists():
-
-            try:
-                CSV_FILE.unlink()
-
-            except Exception as err:
-
-                terminar(
-                    browser,
-                    51,
-                    f"No se puede borrar CSV anterior: {err}",
-                )
-
-        # ----------------------------------------------------
-        # Descargar
-        # ----------------------------------------------------
-
-        print()
-        print("Descargando CSV horario...")
-
-        try:
-
-            with page.expect_download(
-                timeout=60000
-            ) as download_info:
-
-                csv_link.click()
-
-            download = download_info.value
-
-            download.save_as(
-                str(CSV_FILE)
-            )
-
-        except Exception as err:
-
-            terminar(
-                browser,
-                60,
-                f"Error descargando CSV: {err}",
-            )
-
-        # ----------------------------------------------------
-        # Validación
-        # ----------------------------------------------------
-
-        if not CSV_FILE.exists():
-
-            terminar(
-                browser,
-                61,
-                "La descarga terminó pero el CSV no existe.",
-            )
-
-        tamano = CSV_FILE.stat().st_size
-
-        if tamano == 0:
-
-            terminar(
-                browser,
-                62,
-                "El CSV descargado está vacío.",
-            )
-
-        print("✅ CSV descargado correctamente")
-        print(CSV_FILE)
-        print(f"Tamaño: {tamano} bytes")
-
-        # ----------------------------------------------------
-        # Renovar storage_state
-        # ----------------------------------------------------
-
-        try:
-
-            context.storage_state(
-                path=str(STATE_FILE)
-            )
-
-            print(
-                "✅ Estado de sesión actualizado"
-            )
-
-        except Exception as err:
-
-            print(
-                "AVISO: no se pudo actualizar "
-                f"canal_state.json: {err}"
-            )
-
-        # ----------------------------------------------------
-        # Estado OK
-        # ----------------------------------------------------
-
-        guardar_estado(
-            estado="ok",
-            mensaje="Descarga realizada correctamente",
-            codigo=0,
-            csv_bytes=tamano,
-        )
-
-        print()
-        print("==============================================")
-        print(" PROCESO COMPLETADO")
-        print("==============================================")
-        print(
-            datetime.now().strftime(
-                "%d/%m/%Y %H:%M:%S"
-            )
-        )
-        print("Resultado: OK")
-
-        context.close()
-        browser.close()
-
-        sys.exit(0)
-
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as err:
+        _LOGGER.exception("Error inesperado: %s", err)
+        write_status("error", f"Error inesperado: {err}", 99)
+        sys.exit(99)

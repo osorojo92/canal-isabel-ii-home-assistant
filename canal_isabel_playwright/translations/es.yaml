@@ -1,0 +1,10 @@
+configuration:
+  mode:
+    name: "Modo"
+    description: "auto = descarga automática; login = navegador visible para autenticación manual."
+  interval_hours:
+    name: "Intervalo (horas)"
+    description: "Horas entre descargas automáticas."
+  startup_delay:
+    name: "Espera inicial (segundos)"
+    description: "Espera antes de la primera descarga tras iniciar el add-on."

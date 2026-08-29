@@ -1,4 +1,7 @@
-canal_state.json
-*.csv
 __pycache__/
-*.pyc
+*.py[cod]
+*.csv
+canal_state.json
+browser_profile/
+.DS_Store
+Thumbs.db
