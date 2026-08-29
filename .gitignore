@@ -1,0 +1,4 @@
+canal_state.json
+*.csv
+__pycache__/
+*.pyc
