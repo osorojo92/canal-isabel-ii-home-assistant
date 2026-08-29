@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.0.16] - 2026-08-29
+
+### Added
+
+- Añadido procesamiento automático del CSV horario descargado.
+- Añadido `/share/canal_resumen.json` con métricas preparadas para Home Assistant.
+- Añadido `/share/canal_historico_diario.json` para conservar el histórico diario de consumo.
+- Añadido cálculo de consumo total diario.
+- Añadido cálculo de consumo medio horario.
+- Añadido máximo horario y hora de máximo consumo.
+- Añadido número de horas recibidas y horas con consumo.
+- Añadido desglose de consumo por hora.
+- Añadido desglose por franjas: nocturno, mañana, tarde y noche.
+- Añadidas medias móviles de 7 y 30 días.
+- Añadidos máximo y mínimo diarios de los últimos 30 días.
+- Añadidas variaciones porcentuales respecto a las medias de 7 y 30 días.
+- Añadido contador de días disponibles en el histórico.
+- Añadida escritura atómica de los ficheros JSON para reducir el riesgo de corrupción.
+
+### Changed
+
+- El proceso automático no finaliza al descargar el CSV: ahora también valida, procesa y publica los datos preparados para Home Assistant.
+
+## [1.0.15] - 2026-08-29
+
+### Fixed
+
+- Corregida la detección de sesión autenticada en modo `login`.
+- La autenticación ya no depende únicamente de `page.url`.
+- Añadida comprobación de la URL real mediante `window.location.href`.
+- Añadida detección alternativa mediante elementos del DOM de la zona privada.
+- El add-on revisa ahora todas las páginas abiertas del contexto de Chromium.
+- Mejorado el diagnóstico del estado de cada página para detectar discrepancias entre Playwright y la navegación visible en noVNC.
+- La sesión solo se guarda cuando se confirma de forma fiable que el usuario está dentro de la zona autenticada.
+
 ## [1.0.13] - 2026-08-29
 
 ### Fixed
