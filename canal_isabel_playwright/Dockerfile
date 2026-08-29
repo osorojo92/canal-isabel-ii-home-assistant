@@ -39,7 +39,9 @@ RUN git clone \
 
 RUN printf '%s\n' \
     '{' \
-    '  "path": "./websockify",' \
+    '  "host": "",' \
+    '  "port": 0,' \
+    '  "path": "websockify",' \
     '  "autoconnect": true' \
     '}' \
     > /opt/novnc/mandatory.json

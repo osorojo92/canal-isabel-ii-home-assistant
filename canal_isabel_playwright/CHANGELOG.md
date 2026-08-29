@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.5] - 2026-08-29
+
+### Corregido
+- Corregida definitivamente la construcción de la URL WebSocket de noVNC bajo Home Assistant Ingress.
+- Forzado `host` vacío en noVNC para que la conexión WebSocket se resuelva respecto a la URL actual de Ingress.
+- Eliminada la dependencia de una URL WebSocket basada en el host raíz de Home Assistant.
+
+### Técnico
+- Configurados `host`, `port` y `path` mediante `mandatory.json`.
+- noVNC utiliza ahora su soporte nativo de URLs WebSocket relativas.
+
 ## [1.0.4] - 2026-08-29
 
 ### Corregido
