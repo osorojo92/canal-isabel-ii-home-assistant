@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.7] - 2026-08-29
+
+### Corregido
+- Sustituida la interfaz completa de noVNC por un cliente VNC mínimo basado directamente en la API `RFB`.
+- Eliminada la dependencia de `defaults.json` y `mandatory.json`.
+- La URL WebSocket se construye explícitamente utilizando `X-Ingress-Path` proporcionado por Home Assistant.
+- Eliminada la resolución incorrecta de `/websockify` contra la raíz de Home Assistant.
+- Añadido diagnóstico de la URL WebSocket utilizada en la consola del navegador.
+
+### Técnico
+- nginx inyecta dinámicamente el valor de `X-Ingress-Path` en `vnc-ha.html`.
+- Se mantiene noVNC únicamente como librería VNC mediante `core/rfb.js`.
+- Nueva ruta: Home Assistant Ingress → nginx → websockify → x11vnc.
+
 ## [1.0.6] - 2026-08-29
 
 ### Corregido

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>Canal Isabel II - Autenticación</title>
+
+    <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background: #222;
+            font-family: sans-serif;
+        }
+
+        #status {
+            height: 32px;
+            line-height: 32px;
+            padding: 0 12px;
+            background: #333;
+            color: white;
+            font-size: 14px;
+        }
+
+        #screen {
+            width: 100%;
+            height: calc(100% - 32px);
+        }
+    </style>
+</head>
+
+<body>
+
+<div id="status">
+    Preparando conexión VNC...
+</div>
+
+<div id="screen"></div>
+
+<script type="module">
+
+import RFB from './core/rfb.js';
+
+/*
+ * ESTE VALOR LO SUSTITUYE NGINX
+ * usando X-Ingress-Path proporcionado por Home Assistant.
+ */
+const ingressPath = '__INGRESS_PATH__'.replace(/\/+$/, '');
+
+const protocol =
+    window.location.protocol === 'https:'
+        ? 'wss:'
+        : 'ws:';
+
+const websocketUrl =
+    `${protocol}//${window.location.host}${ingressPath}/websockify`;
+
+const status = document.getElementById('status');
+
+console.log('Home Assistant Ingress path:', ingressPath);
+console.log('VNC WebSocket URL:', websocketUrl);
+
+status.textContent =
+    `Conectando a ${websocketUrl}`;
+
+const rfb = new RFB(
+    document.getElementById('screen'),
+    websocketUrl
+);
+
+rfb.scaleViewport = true;
+rfb.resizeSession = true;
+rfb.shared = true;
+
+rfb.addEventListener('connect', () => {
+
+    console.log('VNC conectado');
+
+    status.textContent =
+        'Conectado - inicia sesión en Canal de Isabel II';
+
+});
+
+rfb.addEventListener('disconnect', event => {
+
+    console.error(
+        'VNC desconectado',
+        event.detail
+    );
+
+    if (event.detail.clean) {
+
+        status.textContent =
+            'VNC desconectado';
+
+    } else {
+
+        status.textContent =
+            'ERROR conectando con VNC';
+
+    }
+
+});
+
+rfb.addEventListener(
+    'credentialsrequired',
+    () => {
+
+        console.warn(
+            'VNC solicita credenciales inesperadamente'
+        );
+
+    }
+);
+
+</script>
+
+</body>
+</html>
