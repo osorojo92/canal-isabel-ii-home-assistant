@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.13] - 2026-08-29
+
+### Fixed
+- Corregido el cambio de periodicidad para que no se limite a modificar visualmente el selector de frecuencia.
+- El add-on envía ahora realmente el formulario de Telelecturas tras seleccionar `Horaria`.
+- Reproducido el flujo observado en la Oficina Virtual mediante la acción `/Telelectura/buscarForm`.
+- Se espera a que Canal regenere la consulta antes de localizar el enlace de exportación CSV.
+- Mejorada la detección del enlace de descarga `export-csv`.
+- Añadida validación obligatoria del CSV descargado para confirmar que contiene datos de frecuencia `HORARIA`.
+- Añadida lectura tolerante a distintas codificaciones del CSV.
+- Mejorados los mensajes de diagnóstico del flujo de consulta y descarga.
+
 ## [1.0.12] - 2026-08-29
 
 ### Added

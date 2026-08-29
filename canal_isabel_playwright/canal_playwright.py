@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -11,16 +12,32 @@ from playwright.sync_api import (
     sync_playwright,
 )
 
+# ============================================================
+# Rutas
+# ============================================================
+
 CONFIG_DIR = Path("/config")
 PROFILE_DIR = CONFIG_DIR / "browser_profile"
+
 SHARE_DIR = Path("/share")
 CSV_FILE = SHARE_DIR / "canal_consumo_horario.csv"
 STATUS_FILE = SHARE_DIR / "canal_estado.json"
+
 SESSION_FILE = CONFIG_DIR / "canal_session.json"
+
+
+# ============================================================
+# URLs
+# ============================================================
 
 CONSUMO_URL = (
     "https://oficinavirtual.canaldeisabelsegunda.es/group/ovir/consumo"
 )
+
+
+# ============================================================
+# Logging
+# ============================================================
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,7 +47,15 @@ logging.basicConfig(
 _LOGGER = logging.getLogger("canal")
 
 
+# ============================================================
+# Sesión
+# ============================================================
+
 def restore_session(context) -> bool:
+    """
+    Restaura las cookies guardadas durante el login manual.
+    """
+
     if not SESSION_FILE.exists():
         _LOGGER.warning(
             "No existe sesión guardada: %s",
@@ -70,12 +95,17 @@ def restore_session(context) -> bool:
         return False
 
 
+# ============================================================
+# Estado para Home Assistant
+# ============================================================
+
 def write_status(
     state: str,
     message: str,
     code: int = 0,
     csv_bytes: int | None = None,
 ) -> None:
+
     data = {
         "estado": state,
         "mensaje": message,
@@ -104,7 +134,16 @@ def write_status(
         )
 
 
+# ============================================================
+# Perfil Chromium
+# ============================================================
+
 def remove_profile_locks() -> None:
+    """
+    Elimina locks residuales de Chromium después de un cierre
+    brusco del add-on.
+    """
+
     for name in (
         "SingletonLock",
         "SingletonSocket",
@@ -120,7 +159,12 @@ def remove_profile_locks() -> None:
             pass
 
 
+# ============================================================
+# Comprobación de autenticación
+# ============================================================
+
 def session_is_valid(page) -> bool:
+
     url = page.url.lower()
 
     if "/group/ovir/" in url and "/login" not in url:
@@ -136,12 +180,17 @@ def session_is_valid(page) -> bool:
     return False
 
 
+# ============================================================
+# Error controlado
+# ============================================================
+
 def fail(
     context,
     code: int,
     message: str,
     auth: bool = False,
 ) -> None:
+
     _LOGGER.error(message)
 
     write_status(
@@ -158,88 +207,12 @@ def fail(
     raise SystemExit(code)
 
 
-def select_hourly(page, context) -> None:
-    _LOGGER.info("Buscando selector de periodicidad...")
-
-    periodicity = page.locator(
-        "select#selectPeriodicidad"
-    )
-
-    if periodicity.count() == 0:
-        periodicity = page.locator(
-            'select[id*="selectPeriodicidad"]'
-        )
-
-    if periodicity.count() == 0:
-        fail(
-            context,
-            40,
-            "No se encuentra el selector de periodicidad.",
-        )
-
-    _LOGGER.info(
-        "Selector encontrado. Seleccionando frecuencia HORARIA..."
-    )
-
-    selected = False
-
-    try:
-        periodicity.first.select_option(
-            label="Horaria"
-        )
-        selected = True
-
-    except Exception:
-        pass
-
-    if not selected:
-        try:
-            periodicity.first.select_option(
-                value="Horaria"
-            )
-            selected = True
-
-        except Exception:
-            pass
-
-    if not selected:
-        options = periodicity.first.locator("option")
-
-        for index in range(options.count()):
-            option = options.nth(index)
-
-            text = (
-                option
-                .inner_text()
-                .strip()
-                .lower()
-            )
-
-            if "horaria" in text:
-                value = option.get_attribute("value")
-
-                periodicity.first.select_option(
-                    value=value
-                )
-
-                selected = True
-                break
-
-    if not selected:
-        fail(
-            context,
-            41,
-            "Se encontró el selector, pero no la opción Horaria.",
-        )
-
-    _LOGGER.info(
-        "Frecuencia HORARIA seleccionada."
-    )
-
-    page.wait_for_timeout(5000)
-
+# ============================================================
+# Diagnóstico de red
+# ============================================================
 
 def log_request(request) -> None:
+
     url = request.url.lower()
 
     if (
@@ -268,6 +241,7 @@ def log_request(request) -> None:
 
 
 def log_response(response) -> None:
+
     url = response.url.lower()
 
     if (
@@ -283,35 +257,653 @@ def log_response(response) -> None:
         )
 
 
-def validate_hourly_csv(
-    context,
-) -> None:
+# ============================================================
+# Abrir filtros
+# ============================================================
+
+def open_filters(page) -> None:
+
     try:
-        content = CSV_FILE.read_text(
-            encoding="utf-8",
-            errors="ignore",
-        ).upper()
+        show_filters = page.get_by_text(
+            "Mostrar filtros",
+            exact=False,
+        )
+
+        if (
+            show_filters.count() > 0
+            and show_filters.first.is_visible()
+        ):
+            _LOGGER.info(
+                "Abriendo filtros..."
+            )
+
+            show_filters.first.click()
+
+            page.wait_for_timeout(1000)
 
     except Exception as err:
+        _LOGGER.warning(
+            "No se pudieron abrir los filtros: %s",
+            err,
+        )
+
+
+# ============================================================
+# Selector de periodicidad
+# ============================================================
+
+def find_periodicity_selector(page):
+
+    periodicity = page.locator(
+        "select#selectPeriodicidad"
+    )
+
+    if periodicity.count() == 0:
+        periodicity = page.locator(
+            'select[id*="selectPeriodicidad"]'
+        )
+
+    return periodicity
+
+
+# ============================================================
+# Aplicar filtro HORARIO
+# ============================================================
+
+def select_and_apply_hourly(
+    page,
+    context,
+) -> None:
+
+    _LOGGER.info(
+        "Buscando selector de periodicidad..."
+    )
+
+    periodicity = find_periodicity_selector(page)
+
+    if periodicity.count() == 0:
+        fail(
+            context,
+            40,
+            "No se encuentra el selector de periodicidad.",
+        )
+
+    periodicity = periodicity.first
+
+    _LOGGER.info(
+        "Selector encontrado. Seleccionando frecuencia HORARIA..."
+    )
+
+    selected = False
+
+
+    # --------------------------------------------------------
+    # Intento 1: por label
+    # --------------------------------------------------------
+
+    try:
+        periodicity.select_option(
+            label="Horaria"
+        )
+
+        selected = True
+
+    except Exception:
+        pass
+
+
+    # --------------------------------------------------------
+    # Intento 2: por value
+    # --------------------------------------------------------
+
+    if not selected:
+
+        try:
+            periodicity.select_option(
+                value="Horaria"
+            )
+
+            selected = True
+
+        except Exception:
+            pass
+
+
+    # --------------------------------------------------------
+    # Intento 3: buscar opción que contenga "horaria"
+    # --------------------------------------------------------
+
+    if not selected:
+
+        options = periodicity.locator("option")
+
+        for index in range(options.count()):
+
+            option = options.nth(index)
+
+            try:
+                text = (
+                    option
+                    .inner_text()
+                    .strip()
+                    .lower()
+                )
+
+            except Exception:
+                continue
+
+            if "horaria" in text:
+
+                value = option.get_attribute(
+                    "value"
+                )
+
+                periodicity.select_option(
+                    value=value
+                )
+
+                selected = True
+                break
+
+
+    if not selected:
+        fail(
+            context,
+            41,
+            "Se encontró el selector, pero no la opción Horaria.",
+        )
+
+
+    # --------------------------------------------------------
+    # Verificar selección real
+    # --------------------------------------------------------
+
+    try:
+
+        selected_text = periodicity.locator(
+            "option:checked"
+        ).inner_text().strip()
+
+        _LOGGER.info(
+            "Periodicidad actualmente seleccionada: %s",
+            selected_text,
+        )
+
+        if "horaria" not in selected_text.lower():
+
+            fail(
+                context,
+                42,
+                (
+                    "El selector no quedó realmente "
+                    "en frecuencia Horaria."
+                ),
+            )
+
+    except Exception as err:
+
+        _LOGGER.warning(
+            "No se pudo verificar el texto de la opción: %s",
+            err,
+        )
+
+
+    # --------------------------------------------------------
+    # Encontrar formulario que contiene el selector
+    # --------------------------------------------------------
+
+    form = periodicity.locator(
+        "xpath=ancestor::form[1]"
+    )
+
+    if form.count() == 0:
+        fail(
+            context,
+            43,
+            (
+                "No se encontró el formulario asociado "
+                "al selector de periodicidad."
+            ),
+        )
+
+    form = form.first
+
+
+    # --------------------------------------------------------
+    # Diagnóstico del formulario
+    # --------------------------------------------------------
+
+    try:
+
+        form_action = form.get_attribute("action")
+        form_method = form.get_attribute("method")
+
+        _LOGGER.info(
+            "Formulario Telelecturas: method=%s action=%s",
+            form_method,
+            form_action,
+        )
+
+    except Exception:
+        pass
+
+
+    _LOGGER.info(
+        "Enviando formulario de Telelecturas con periodicidad HORARIA..."
+    )
+
+
+    # --------------------------------------------------------
+    # Enviar realmente el formulario.
+    #
+    # Esto reproduce el POST observado manualmente:
+    #
+    # p_p_lifecycle = 1
+    # javax.portlet.action = /Telelectura/buscarForm
+    # periodicidad = Horaria
+    # --------------------------------------------------------
+
+    try:
+
+        form.evaluate(
+            """
+            form => {
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit();
+                } else {
+                    form.submit();
+                }
+            }
+            """
+        )
+
+    except Exception as err:
+
+        fail(
+            context,
+            44,
+            f"Error enviando formulario de Telelecturas: {err}",
+        )
+
+
+    # --------------------------------------------------------
+    # Esperar respuesta / actualización
+    # --------------------------------------------------------
+
+    try:
+
+        page.wait_for_load_state(
+            "domcontentloaded",
+            timeout=60000,
+        )
+
+    except PlaywrightTimeoutError:
+
+        # Algunas acciones de Liferay no generan una navegación
+        # tradicional; seguimos esperando a que aparezcan datos.
+        _LOGGER.warning(
+            "No hubo evento DOMContentLoaded tras enviar el formulario."
+        )
+
+
+    # Liferay puede realizar trabajo adicional después del POST.
+    page.wait_for_timeout(5000)
+
+
+    # --------------------------------------------------------
+    # Comprobar que seguimos autenticados
+    # --------------------------------------------------------
+
+    if not session_is_valid(page):
+
+        fail(
+            context,
+            31,
+            (
+                "La sesión se perdió al aplicar "
+                "la periodicidad Horaria."
+            ),
+            auth=True,
+        )
+
+
+    # --------------------------------------------------------
+    # Comprobar que la página realmente está en HORARIA
+    # --------------------------------------------------------
+
+    body_text = ""
+
+    try:
+
+        body_text = page.locator(
+            "body"
+        ).inner_text(
+            timeout=10000
+        )
+
+    except Exception as err:
+
+        _LOGGER.warning(
+            "No se pudo leer el texto de la página: %s",
+            err,
+        )
+
+
+    normalized = re.sub(
+        r"\s+",
+        " ",
+        body_text,
+    ).upper()
+
+
+    if "CONSUMO FRECUENCIA HORARIA" in normalized:
+
+        _LOGGER.info(
+            "Consulta HORARIA aplicada correctamente."
+        )
+
+    elif "FRECUENCIA HORARIA" in normalized:
+
+        _LOGGER.info(
+            "La página confirma frecuencia HORARIA."
+        )
+
+    else:
+
+        _LOGGER.warning(
+            (
+                "No se encontró el texto 'FRECUENCIA HORARIA' "
+                "en la página. Se continuará, pero el CSV "
+                "será validado obligatoriamente."
+            )
+        )
+
+
+# ============================================================
+# Localizar exportación CSV
+# ============================================================
+
+def find_csv_link(
+    page,
+    context,
+):
+
+    _LOGGER.info(
+        "Buscando enlace de exportación CSV..."
+    )
+
+    # La petición real observada utiliza:
+    #
+    # p_p_resource_id=/Telelecturas/export-csv
+    # p_p_lifecycle=2
+    # fileFormat=CSV
+
+    selectors = [
+        'a[href*="export-csv"]',
+        'a[href*="Telelecturas%2Fexport-csv"]',
+        'a[href*="Telelecturas/export-csv"]',
+        'a[href*="fileFormat=CSV"]',
+        'a[href*="fileFormat%3DCSV"]',
+    ]
+
+
+    for selector in selectors:
+
+        links = page.locator(selector)
+
+        if links.count() > 0:
+
+            _LOGGER.info(
+                "Enlace CSV encontrado con selector: %s",
+                selector,
+            )
+
+            try:
+
+                href = links.first.get_attribute(
+                    "href"
+                )
+
+                _LOGGER.info(
+                    "URL exportación CSV: %s",
+                    href,
+                )
+
+            except Exception:
+                pass
+
+            return links.first
+
+
+    fail(
+        context,
+        50,
+        "No se encuentra el enlace de exportación CSV.",
+    )
+
+
+# ============================================================
+# Descargar CSV
+# ============================================================
+
+def download_csv(
+    page,
+    context,
+) -> int:
+
+    csv_link = find_csv_link(
+        page,
+        context,
+    )
+
+
+    if CSV_FILE.exists():
+
+        try:
+            CSV_FILE.unlink()
+
+        except Exception as err:
+
+            fail(
+                context,
+                51,
+                (
+                    "No se puede borrar el CSV anterior: "
+                    f"{err}"
+                ),
+            )
+
+
+    _LOGGER.info(
+        "Descargando CSV horario..."
+    )
+
+
+    try:
+
+        with page.expect_download(
+            timeout=60000
+        ) as download_info:
+
+            csv_link.click()
+
+
+        download = download_info.value
+
+        _LOGGER.info(
+            "Nombre sugerido por Canal: %s",
+            download.suggested_filename,
+        )
+
+        download.save_as(
+            str(CSV_FILE)
+        )
+
+
+    except Exception as err:
+
+        fail(
+            context,
+            60,
+            f"Error descargando CSV: {err}",
+        )
+
+
+    if not CSV_FILE.exists():
+
+        fail(
+            context,
+            61,
+            (
+                "La descarga terminó pero "
+                "el CSV no existe."
+            ),
+        )
+
+
+    size = CSV_FILE.stat().st_size
+
+
+    if size == 0:
+
+        fail(
+            context,
+            62,
+            "El CSV descargado está vacío.",
+        )
+
+
+    return size
+
+
+# ============================================================
+# Leer CSV tolerando distintas codificaciones
+# ============================================================
+
+def read_csv_text(
+    context,
+) -> str:
+
+    try:
+
+        raw = CSV_FILE.read_bytes()
+
+    except Exception as err:
+
         fail(
             context,
             63,
             f"No se puede leer el CSV descargado: {err}",
         )
 
-    if "HORARIA" not in content:
-        fail(
-            context,
-            64,
-            "El CSV descargado no contiene frecuencia HORARIA.",
-        )
 
-    _LOGGER.info(
-        "Validación CSV correcta: contiene frecuencia HORARIA."
+    encodings = (
+        "utf-8-sig",
+        "utf-8",
+        "cp1252",
+        "latin-1",
     )
 
 
+    for encoding in encodings:
+
+        try:
+
+            text = raw.decode(
+                encoding
+            )
+
+            _LOGGER.info(
+                "CSV leído usando codificación %s.",
+                encoding,
+            )
+
+            return text
+
+        except UnicodeDecodeError:
+            continue
+
+
+    fail(
+        context,
+        63,
+        "No se pudo determinar la codificación del CSV.",
+    )
+
+
+# ============================================================
+# Validación del CSV
+# ============================================================
+
+def validate_hourly_csv(
+    context,
+) -> None:
+
+    content = read_csv_text(
+        context
+    )
+
+    upper_content = content.upper()
+
+
+    # --------------------------------------------------------
+    # Debe existir HORARIA
+    # --------------------------------------------------------
+
+    if "HORARIA" not in upper_content:
+
+        fail(
+            context,
+            64,
+            (
+                "El CSV descargado no contiene frecuencia HORARIA. "
+                "Canal ha devuelto datos de otra periodicidad."
+            ),
+        )
+
+
+    # --------------------------------------------------------
+    # Información adicional
+    # --------------------------------------------------------
+
+    lines = [
+        line
+        for line in content.splitlines()
+        if line.strip()
+    ]
+
+
+    _LOGGER.info(
+        "CSV horario validado: %s líneas no vacías.",
+        len(lines),
+    )
+
+
+    # Si vemos DIARIA además de HORARIA lo registramos.
+    # No lo tratamos automáticamente como error porque
+    # podría aparecer en alguna cabecera/texto auxiliar.
+
+    if "DIARIA" in upper_content:
+
+        _LOGGER.warning(
+            (
+                "El CSV contiene también el texto DIARIA. "
+                "Se mantiene la descarga porque contiene HORARIA."
+            )
+        )
+
+
+    _LOGGER.info(
+        "Validación CSV correcta: frecuencia HORARIA confirmada."
+    )
+
+
+# ============================================================
+# Main
+# ============================================================
+
 def main() -> None:
+
     CONFIG_DIR.mkdir(
         parents=True,
         exist_ok=True,
@@ -327,12 +919,16 @@ def main() -> None:
         exist_ok=True,
     )
 
+
     remove_profile_locks()
 
+
     with sync_playwright() as p:
+
         _LOGGER.info(
             "Abriendo Telelecturas con Chromium headless..."
         )
+
 
         context = p.chromium.launch_persistent_context(
             user_data_dir=str(PROFILE_DIR),
@@ -348,16 +944,25 @@ def main() -> None:
             ],
         )
 
-        restore_session(context)
+
+        restore_session(
+            context
+        )
+
 
         try:
+
             page = (
                 context.pages[0]
                 if context.pages
                 else context.new_page()
             )
 
-            # Logging de red para diagnóstico
+
+            # ------------------------------------------------
+            # Diagnóstico de red
+            # ------------------------------------------------
+
             page.on(
                 "request",
                 log_request,
@@ -368,166 +973,102 @@ def main() -> None:
                 log_response,
             )
 
+
+            # ------------------------------------------------
+            # Abrir Telelecturas
+            # ------------------------------------------------
+
             try:
+
                 page.goto(
                     CONSUMO_URL,
                     wait_until="domcontentloaded",
                     timeout=60000,
                 )
 
-                page.wait_for_timeout(4000)
+                page.wait_for_timeout(
+                    4000
+                )
 
             except PlaywrightTimeoutError:
+
                 fail(
                     context,
                     20,
                     "Timeout abriendo la página de consumo.",
                 )
 
+
             _LOGGER.info(
                 "URL actual: %s",
                 page.url,
             )
 
+
+            # ------------------------------------------------
+            # Verificar sesión
+            # ------------------------------------------------
+
             if not session_is_valid(page):
+
                 fail(
                     context,
                     30,
                     (
                         "La sesión ha caducado o requiere "
-                        "autenticación manual. Cambia mode a login."
+                        "autenticación manual. "
+                        "Cambia mode a login."
                     ),
                     auth=True,
                 )
+
 
             _LOGGER.info(
                 "Sesión autenticada."
             )
 
-            try:
-                show_filters = page.get_by_text(
-                    "Mostrar filtros",
-                    exact=False,
-                )
 
-                if (
-                    show_filters.count() > 0
-                    and show_filters.first.is_visible()
-                ):
-                    _LOGGER.info(
-                        "Abriendo filtros..."
-                    )
+            # ------------------------------------------------
+            # Abrir filtros
+            # ------------------------------------------------
 
-                    show_filters.first.click()
+            open_filters(
+                page
+            )
 
-                    page.wait_for_timeout(
-                        1000
-                    )
 
-            except Exception as err:
-                _LOGGER.warning(
-                    "No se pudieron abrir los filtros: %s",
-                    err,
-                )
+            # ------------------------------------------------
+            # Seleccionar HORARIA y ENVIAR formulario
+            # ------------------------------------------------
 
-            select_hourly(
+            select_and_apply_hourly(
                 page,
                 context,
             )
 
-            if not session_is_valid(page):
-                fail(
-                    context,
-                    31,
-                    (
-                        "La sesión se perdió al cambiar "
-                        "la periodicidad."
-                    ),
-                    auth=True,
-                )
 
-            _LOGGER.info(
-                "Buscando enlace de exportación CSV..."
+            # ------------------------------------------------
+            # Descargar CSV generado tras la búsqueda horaria
+            # ------------------------------------------------
+
+            size = download_csv(
+                page,
+                context,
             )
 
-            csv_links = page.locator(
-                'a[href*="export-csv"]'
-            )
 
-            if csv_links.count() == 0:
-                fail(
-                    context,
-                    50,
-                    (
-                        "No se encuentra el enlace "
-                        "de exportación CSV."
-                    ),
-                )
-
-            _LOGGER.info(
-                "Enlaces CSV encontrados: %s",
-                csv_links.count(),
-            )
-
-            if CSV_FILE.exists():
-                try:
-                    CSV_FILE.unlink()
-
-                except Exception as err:
-                    fail(
-                        context,
-                        51,
-                        (
-                            "No se puede borrar "
-                            f"el CSV anterior: {err}"
-                        ),
-                    )
-
-            _LOGGER.info(
-                "Descargando CSV horario..."
-            )
-
-            try:
-                with page.expect_download(
-                    timeout=60000
-                ) as download_info:
-                    csv_links.first.click()
-
-                download = download_info.value
-
-                download.save_as(
-                    str(CSV_FILE)
-                )
-
-            except Exception as err:
-                fail(
-                    context,
-                    60,
-                    f"Error descargando CSV: {err}",
-                )
-
-            if not CSV_FILE.exists():
-                fail(
-                    context,
-                    61,
-                    (
-                        "La descarga terminó "
-                        "pero el CSV no existe."
-                    ),
-                )
-
-            size = CSV_FILE.stat().st_size
-
-            if size == 0:
-                fail(
-                    context,
-                    62,
-                    "El CSV descargado está vacío.",
-                )
+            # ------------------------------------------------
+            # Verificar que Canal realmente devuelve HORARIA
+            # ------------------------------------------------
 
             validate_hourly_csv(
                 context
             )
+
+
+            # ------------------------------------------------
+            # Éxito
+            # ------------------------------------------------
 
             _LOGGER.info(
                 "CSV descargado correctamente: %s (%s bytes)",
@@ -535,25 +1076,35 @@ def main() -> None:
                 size,
             )
 
+
             write_status(
                 "ok",
-                "Descarga realizada correctamente.",
+                "Descarga horaria realizada correctamente.",
                 0,
                 size,
             )
+
 
             _LOGGER.info(
                 "Proceso completado correctamente."
             )
 
+
         finally:
+
             try:
                 context.close()
+
             except Exception:
                 pass
 
 
+# ============================================================
+# Entry point
+# ============================================================
+
 if __name__ == "__main__":
+
     try:
         main()
 
@@ -561,6 +1112,7 @@ if __name__ == "__main__":
         raise
 
     except Exception as err:
+
         _LOGGER.exception(
             "Error inesperado: %s",
             err,
