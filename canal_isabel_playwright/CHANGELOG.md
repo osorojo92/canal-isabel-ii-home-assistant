@@ -1,4 +1,15 @@
 # Changelog
+
+## [1.0.4] - 2026-08-29
+
+### Corregido
+- Forzada la ruta WebSocket relativa de noVNC mediante `mandatory.json`.
+- Evitado que configuraciones persistidas previamente en el navegador sobrescriban la ruta WebSocket requerida por Home Assistant Ingress.
+- Configurado `./websockify` como endpoint obligatorio para la conexión VNC.
+
+### Cambiado
+- La configuración de noVNC pasa de `defaults.json` a `mandatory.json` para garantizar compatibilidad con Home Assistant Ingress.
+
 ## [1.0.3] - 2026-08-29
 
 ### Corregido

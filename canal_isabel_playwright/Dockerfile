@@ -42,7 +42,7 @@ RUN printf '%s\n' \
     '  "path": "./websockify",' \
     '  "autoconnect": true' \
     '}' \
-    > /opt/novnc/defaults.json
+    > /opt/novnc/mandatory.json
 
 COPY canal_playwright.py /app/canal_playwright.py
 COPY auth_browser.py /app/auth_browser.py
