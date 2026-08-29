@@ -88,7 +88,7 @@ echo "x11vnc OK"
 
 echo "Arrancando noVNC/websockify..."
 websockify \
-    --web=/usr/share/novnc \
+    --web=/opt/novnc \
     8099 \
     localhost:5900 &
 NOVNC_PID=$!
