@@ -1,0 +1,25 @@
+name: "Canal Isabel II Playwright"
+version: "0.1.1"
+slug: "canal_isabel_playwright"
+description: "Descarga automática de telelecturas del Canal de Isabel II mediante Chromium/Playwright"
+startup: services
+boot: auto
+init: false
+
+arch:
+  - amd64
+  - aarch64
+
+map:
+  - type: share
+    read_only: false
+  - type: addon_config
+    read_only: false
+
+options:
+  interval_hours: 24
+  startup_delay: 30
+
+schema:
+  interval_hours: "int(1,168)"
+  startup_delay: "int(0,600)"
