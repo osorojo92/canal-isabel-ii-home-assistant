@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.8] - 2026-08-29
+
+### Corregido
+- Corregida la sintaxis de `nginx.conf`.
+- Sustituidos comentarios no válidos de estilo `/* ... */` por comentarios compatibles con nginx.
+- Restaurado el arranque del proxy nginx para Home Assistant Ingress.
+
 ## [1.0.7] - 2026-08-29
 
 ### Corregido
