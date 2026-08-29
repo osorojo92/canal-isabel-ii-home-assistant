@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.11] - 2026-08-29
+
+### Fixed
+- Corregida la detección de autenticación manual cuando el flujo de login utiliza una página o pestaña diferente de Chromium.
+- El modo `login` comprueba ahora todas las páginas abiertas del contexto persistente de Playwright.
+- La sesión se guarda inmediatamente cuando cualquiera de las páginas alcanza la zona privada de la Oficina Virtual.
+- Añadido registro de diagnóstico de las URLs abiertas en Chromium para facilitar la detección de cambios en el flujo de autenticación.
+
 ## [1.0.10] - 2026-08-29
 
 ### Fixed

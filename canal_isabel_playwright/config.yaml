@@ -1,5 +1,5 @@
 name: "Canal Isabel II Playwright"
-version: "1.0.10"
+version: "1.0.11"
 slug: "canal_isabel_playwright"
 description: "Descarga automática de telelecturas del Canal de Isabel II mediante Chromium/Playwright"
 url: "https://github.com/osorojo92/canal-isabel-ii-home-assistant"
