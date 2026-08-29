@@ -1,4 +1,15 @@
 # Changelog
+## [1.0.3] - 2026-08-29
+
+### Corregido
+- Corregida la configuración del WebSocket de noVNC detrás de Home Assistant Ingress.
+- Añadida configuración explícita de la ruta relativa `./websockify` mediante `defaults.json`.
+- Eliminado el parche anterior sobre `vnc.html`, que no afectaba al flujo real de noVNC 1.6.0.
+
+### Cambiado
+- Se mantiene `vnc.html` como punto de entrada de Ingress.
+- Simplificado el arranque de noVNC/websockify para usar la configuración nativa de noVNC.
+
 ## [1.0.2] - 2026-08-29
 
 ### Corregido

@@ -37,6 +37,13 @@ RUN git clone \
         /opt/novnc \
     && rm -rf /opt/novnc/.git
 
+RUN printf '%s\n' \
+    '{' \
+    '  "path": "./websockify",' \
+    '  "autoconnect": true' \
+    '}' \
+    > /opt/novnc/defaults.json
+
 COPY canal_playwright.py /app/canal_playwright.py
 COPY auth_browser.py /app/auth_browser.py
 COPY run.sh /run.sh
