@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.12] - 2026-08-29
+
+### Added
+- Añadido registro de peticiones y respuestas de red relacionadas con consumo, periodicidad, telelectura y exportación.
+- Añadido registro del cuerpo de peticiones POST para facilitar el diagnóstico del cambio de frecuencia.
+- Añadida validación del CSV descargado para comprobar que contiene frecuencia `HORARIA`.
+
+### Changed
+- El proceso ya no considera correcta una descarga si el CSV no corresponde realmente a frecuencia horaria.
+
+### Fixed
+- Evitado que el add-on marque como correcta una descarga diaria cuando se esperaba consumo horario.
+
 ## [1.0.11] - 2026-08-29
 
 ### Fixed

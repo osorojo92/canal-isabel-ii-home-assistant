@@ -111,35 +111,68 @@ def main() -> None:
                 "Navegador listo. Inicia sesión manualmente. "
                 "Si aparece CAPTCHA, resuélvelo en la interfaz web."
             )
-
+            
             last_state = None
+            last_urls = None
 
             while not STOP_EVENT.is_set():
                 try:
-                    url = page.url.lower()
-                    if "/group/ovir/" in url and "/login" not in url:
+                    pages = context.pages
+
+                    urls = []
+                    authenticated_page = None
+
+                    for candidate in pages:
+                        try:
+                            candidate_url = candidate.url.lower()
+                            urls.append(candidate_url)
+
+                            if (
+                                "/group/ovir/" in candidate_url
+                                and "/login" not in candidate_url
+                            ):
+                                authenticated_page = candidate
+
+                        except Exception:
+                            continue
+
+                    # Log de diagnóstico solo cuando cambian las URLs
+                    urls_tuple = tuple(urls)
+
+                    if urls_tuple != last_urls:
+                        _LOGGER.info(
+                            "Páginas Chromium detectadas: %s",
+                            urls,
+                        )
+                        last_urls = urls_tuple
+
+                    if authenticated_page is not None:
                         current = "autenticado"
 
                         if current != last_state:
-
                             _LOGGER.info(
-                                "Sesión autenticada detectada."
+                                "Sesión autenticada detectada en: %s",
+                                authenticated_page.url,
                             )
 
-                            # IMPORTANTE:
-                            # Guardamos las cookies AHORA.
-                            # No esperamos al cierre de Chromium.
                             save_session(context)
 
                             write_status(
                                 "autenticado",
-                                "Sesión autenticada y guardada. Ya puedes cambiar a mode auto.",
+                                "Sesión autenticada y guardada. "
+                                "Ya puedes cambiar a mode auto.",
                             )
+
                     else:
                         current = "pendiente"
+
                     last_state = current
-                except Exception:
-                    pass
+
+                except Exception as err:
+                    _LOGGER.warning(
+                        "Error comprobando estado de autenticación: %s",
+                        err,
+                    )
 
                 STOP_EVENT.wait(2)
 
