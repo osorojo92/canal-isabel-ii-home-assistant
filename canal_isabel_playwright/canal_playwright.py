@@ -522,6 +522,8 @@ def find_periodicity_selector(
 def select_and_apply_hourly(
     page,
     context,
+    start_date: date,
+    end_date: date,
 ) -> None:
 
     _LOGGER.info(
@@ -691,6 +693,161 @@ def select_and_apply_hourly(
         )
 
     # --------------------------------------------------------
+    # IMPORTANTE:
+    # Canal modifica las fechas al cambiar periodicidad.
+    # Esperamos a que termine su Javascript y SOLO DESPUÉS
+    # aplicamos nuestro rango.
+    # --------------------------------------------------------
+
+    _LOGGER.info(
+        (
+            "Esperando estabilización del formulario "
+            "tras seleccionar Horaria..."
+        )
+    )
+
+    page.wait_for_timeout(
+        1000
+    )
+
+    set_date_range(
+        page,
+        context,
+        start_date,
+        end_date,
+    )
+
+    # --------------------------------------------------------
+    # Verificación final de fechas
+    # justo antes del submit
+    # --------------------------------------------------------
+
+    fecha_desde_field = (
+        page
+        .locator(
+            'input[name$="fechaDesde"]'
+        )
+        .first
+    )
+
+    fecha_hasta_field = (
+        page
+        .locator(
+            'input[name$="fechaHasta"]'
+        )
+        .first
+    )
+
+    fecha_desde_final = (
+        fecha_desde_field
+        .input_value()
+    )
+
+    fecha_hasta_final = (
+        fecha_hasta_field
+        .input_value()
+    )
+
+    periodicidad_final = (
+        periodicity
+        .locator(
+            "option:checked"
+        )
+        .inner_text()
+        .strip()
+    )
+
+    _LOGGER.info(
+        "Valores finales ANTES DEL SUBMIT:"
+    )
+
+    _LOGGER.info(
+        "  fechaDesde = %s",
+        fecha_desde_final,
+    )
+
+    _LOGGER.info(
+        "  fechaHasta = %s",
+        fecha_hasta_final,
+    )
+
+    _LOGGER.info(
+        "  periodicidad = %s",
+        periodicidad_final,
+    )
+
+    expected_start = (
+        start_date.isoformat()
+    )
+
+    expected_end = (
+        end_date.isoformat()
+    )
+
+    if (
+        fecha_desde_final
+        != expected_start
+        or fecha_hasta_final
+        != expected_end
+    ):
+
+        _LOGGER.warning(
+            (
+                "Canal volvió a modificar las fechas. "
+                "Se intentará restaurarlas una vez más."
+            )
+        )
+
+        set_date_range(
+            page,
+            context,
+            start_date,
+            end_date,
+        )
+
+        fecha_desde_final = (
+            fecha_desde_field
+            .input_value()
+        )
+
+        fecha_hasta_final = (
+            fecha_hasta_field
+            .input_value()
+        )
+
+        _LOGGER.info(
+            "Valores tras segundo ajuste:"
+        )
+
+        _LOGGER.info(
+            "  fechaDesde = %s",
+            fecha_desde_final,
+        )
+
+        _LOGGER.info(
+            "  fechaHasta = %s",
+            fecha_hasta_final,
+        )
+
+    if (
+        fecha_desde_final
+        != expected_start
+        or fecha_hasta_final
+        != expected_end
+    ):
+
+        fail(
+            context,
+            47,
+            (
+                "Las fechas no permanecen configuradas "
+                "antes de enviar el formulario. "
+                f"Esperado={expected_start}->{expected_end}, "
+                f"actual={fecha_desde_final}->{fecha_hasta_final}"
+            ),
+        )
+
+    # --------------------------------------------------------
     # Formulario
     # --------------------------------------------------------
 
@@ -834,7 +991,6 @@ def select_and_apply_hourly(
                 "El CSV será validado."
             )
         )
-
 
 # ============================================================
 # BUSCAR ENLACE CSV
@@ -2584,16 +2740,11 @@ def main() -> None:
                 get_history_query_range()
             )
 
-            set_date_range(
+            select_and_apply_hourly(
                 page,
                 context,
                 history_start_date,
                 history_end_date,
-            )
-
-            select_and_apply_hourly(
-                page,
-                context,
             )
 
             # ------------------------------------------------

@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.19] - 2026-09-03
+
+### Fixed
+
+- Corregido el rango temporal utilizado para recuperar el histórico diario.
+- Canal restablecía `fechaDesde` y `fechaHasta` al cambiar la periodicidad a Horaria.
+- Las fechas se aplican ahora después de seleccionar la periodicidad y justo antes de enviar el formulario.
+- Añadida verificación final de `fechaDesde`, `fechaHasta` y periodicidad antes del submit.
+- Añadido segundo intento automático si la web modifica nuevamente las fechas.
+- La ejecución falla de forma controlada si no es posible conservar el intervalo solicitado.
+
+### Diagnostics
+
+- Añadido log de los valores reales del formulario inmediatamente antes del submit.
+
 ## [1.0.18] - 2026-09-02
 
 ### Fixed
