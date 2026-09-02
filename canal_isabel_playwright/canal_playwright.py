@@ -32,6 +32,9 @@ HISTORICO_FILE = SHARE_DIR / "canal_historico_diario.json"
 SESSION_FILE = CONFIG_DIR / "canal_session.json"
 SESSION_STORAGE_FILE = CONFIG_DIR / "canal_session_storage.json"
 
+HISTORY_BOOTSTRAP_DAYS = 30
+HISTORY_REFRESH_DAYS = 7
+
 
 # ============================================================
 # URL
@@ -1364,6 +1367,19 @@ def parse_hourly_csv(
         len(dias),
     )
 
+    fechas_recibidas = sorted(
+        dias.keys()
+    )
+
+    _LOGGER.info(
+        (
+            "Rango realmente recibido en CSV: "
+            "%s -> %s."
+        ),
+        fechas_recibidas[0],
+        fechas_recibidas[-1],
+    )
+
     return {
         "contrato": contrato,
         "contador": contador,
@@ -1618,6 +1634,19 @@ def update_history(
         {},
     )
 
+    previous_count = len(
+        days
+    )
+
+    received_count = len(
+        parsed_data[
+            "dias"
+        ]
+    )
+
+    new_days = 0
+    updated_days = 0
+
     for fecha_iso, data in (
         parsed_data[
             "dias"
@@ -1631,13 +1660,20 @@ def update_history(
             ],
         )
 
+        if fecha_iso in days:
+
+            updated_days += 1
+
+        else:
+
+            new_days += 1
+
         days[
             fecha_iso
         ] = summary[
             "consumo_total_l"
         ]
 
-    # Orden cronológico para que el JSON sea legible.
     history[
         "dias"
     ] = dict(
@@ -1660,20 +1696,42 @@ def update_history(
         history,
     )
 
+    final_count = len(
+        history[
+            "dias"
+        ]
+    )
+
     _LOGGER.info(
-        (
-            "Histórico diario actualizado: "
-            "%s días almacenados."
-        ),
-        len(
-            history[
-                "dias"
-            ]
-        ),
+        "Actualización del histórico:"
+    )
+
+    _LOGGER.info(
+        "  Días almacenados anteriormente: %s",
+        previous_count,
+    )
+
+    _LOGGER.info(
+        "  Días recibidos en esta ejecución: %s",
+        received_count,
+    )
+
+    _LOGGER.info(
+        "  Días nuevos añadidos: %s",
+        new_days,
+    )
+
+    _LOGGER.info(
+        "  Días existentes actualizados: %s",
+        updated_days,
+    )
+
+    _LOGGER.info(
+        "  Total de días almacenados: %s",
+        final_count,
     )
 
     return history
-
 
 # ============================================================
 # MÉTRICAS HISTÓRICAS
@@ -1777,6 +1835,97 @@ def variation_percent(
 # ============================================================
 # GENERAR RESUMEN JSON
 # ============================================================
+def log_history_integrity(
+    history: dict,
+    reference_date: date,
+) -> None:
+
+    existing_dates = set()
+
+    for fecha_iso in (
+        history
+        .get(
+            "dias",
+            {},
+        )
+        .keys()
+    ):
+
+        try:
+
+            existing_dates.add(
+                date.fromisoformat(
+                    fecha_iso
+                )
+            )
+
+        except ValueError:
+            continue
+
+    for days_count in (
+        7,
+        30,
+    ):
+
+        start_date = (
+            reference_date
+            - timedelta(
+                days=days_count - 1
+            )
+        )
+
+        expected = [
+            start_date
+            + timedelta(days=i)
+            for i in range(
+                days_count
+            )
+        ]
+
+        available = sum(
+            1
+            for current_date in expected
+            if current_date in existing_dates
+        )
+
+        missing = [
+            current_date
+            for current_date in expected
+            if current_date
+            not in existing_dates
+        ]
+
+        _LOGGER.info(
+            (
+                "Integridad últimos %s días: "
+                "%s/%s disponibles."
+            ),
+            days_count,
+            available,
+            days_count,
+        )
+
+        if missing:
+
+            _LOGGER.warning(
+                (
+                    "Quedan %s huecos "
+                    "en los últimos %s días."
+                ),
+                len(missing),
+                days_count,
+            )
+
+            if len(missing) <= 10:
+
+                _LOGGER.warning(
+                    "Huecos: %s",
+                    ", ".join(
+                        current_date.isoformat()
+                        for current_date
+                        in missing
+                    ),
+                )
 
 def generate_summary_files(
     context,
@@ -1815,6 +1964,11 @@ def generate_summary_files(
         date.fromisoformat(
             latest_date_iso
         )
+    )
+    
+    log_history_integrity(
+        history,
+        reference_date,
     )
 
     values_7d = get_history_window(
@@ -1957,6 +2111,283 @@ def generate_summary_files(
 
     return summary
 
+# Determinar Intervalo
+def get_history_query_range() -> tuple[date, date]:
+
+    end_date = (
+        date.today()
+        - timedelta(days=1)
+    )
+
+    history = load_history()
+
+    history_days = (
+        history
+        .get(
+            "dias",
+            {},
+        )
+    )
+
+    existing_dates = set()
+
+    for fecha_iso in history_days.keys():
+
+        try:
+
+            existing_dates.add(
+                date.fromisoformat(
+                    fecha_iso
+                )
+            )
+
+        except ValueError:
+            continue
+
+    _LOGGER.info(
+        "Histórico existente: %s días.",
+        len(existing_dates),
+    )
+
+    _LOGGER.info(
+        "Último día completo consultable: %s.",
+        end_date,
+    )
+
+    start_window = (
+        end_date
+        - timedelta(
+            days=HISTORY_BOOTSTRAP_DAYS - 1
+        )
+    )
+
+    expected_dates = [
+        start_window
+        + timedelta(days=i)
+        for i in range(
+            HISTORY_BOOTSTRAP_DAYS
+        )
+    ]
+
+    missing_dates = [
+        current_date
+        for current_date
+        in expected_dates
+        if current_date
+        not in existing_dates
+    ]
+
+    _LOGGER.info(
+        (
+            "Analizando histórico de los últimos %s días: "
+            "%s esperados, %s existentes, %s ausentes."
+        ),
+        HISTORY_BOOTSTRAP_DAYS,
+        len(expected_dates),
+        sum(
+            1
+            for current_date in expected_dates
+            if current_date in existing_dates
+        ),
+        len(missing_dates),
+    )
+
+    if missing_dates:
+
+        start_date = min(
+            missing_dates
+        )
+
+        _LOGGER.info(
+            "Modo histórico: RECUPERACIÓN."
+        )
+
+        _LOGGER.info(
+            (
+                "Primer hueco: %s. "
+                "Último hueco: %s."
+            ),
+            min(missing_dates),
+            max(missing_dates),
+        )
+
+        if len(missing_dates) <= 10:
+
+            _LOGGER.info(
+                "Días ausentes: %s",
+                ", ".join(
+                    current_date.isoformat()
+                    for current_date
+                    in missing_dates
+                ),
+            )
+
+    else:
+
+        start_date = (
+            end_date
+            - timedelta(
+                days=HISTORY_REFRESH_DAYS - 1
+            )
+        )
+
+        _LOGGER.info(
+            "Modo histórico: REFRESCO."
+        )
+
+        _LOGGER.info(
+            (
+                "No hay huecos en los últimos %s días. "
+                "Se refrescarán los últimos %s días."
+            ),
+            HISTORY_BOOTSTRAP_DAYS,
+            HISTORY_REFRESH_DAYS,
+        )
+
+    _LOGGER.info(
+        (
+            "Intervalo que se solicitará a Canal: "
+            "%s -> %s."
+        ),
+        start_date,
+        end_date,
+    )
+
+    return (
+        start_date,
+        end_date,
+    )
+
+#introduzca esas fechas en el formulario de Canal
+def set_date_range(
+    page,
+    context,
+    start_date: date,
+    end_date: date,
+) -> None:
+
+    fields = {
+        "fechaDesde": start_date.isoformat(),
+        "fechaHasta": end_date.isoformat(),
+    }
+
+    for field_name, value in (
+        fields.items()
+    ):
+
+        selectors = [
+            f'input[name="{field_name}"]',
+            f'input[name$="{field_name}"]',
+            f'input[id="{field_name}"]',
+            f'input[id$="{field_name}"]',
+        ]
+
+        field = None
+
+        for selector in selectors:
+
+            candidate = page.locator(
+                selector
+            )
+
+            if candidate.count() > 0:
+
+                field = candidate.first
+
+                _LOGGER.info(
+                    (
+                        "Campo %s encontrado "
+                        "con selector: %s"
+                    ),
+                    field_name,
+                    selector,
+                )
+
+                break
+
+        if field is None:
+
+            fail(
+                context,
+                45,
+                (
+                    "No se encuentra el campo "
+                    f"{field_name}."
+                ),
+            )
+
+        try:
+
+            field.fill(
+                value
+            )
+
+        except Exception:
+
+            field.evaluate(
+                """
+                (element, value) => {
+
+                    element.removeAttribute(
+                        'readonly'
+                    );
+
+                    element.value = value;
+
+                    element.dispatchEvent(
+                        new Event(
+                            'input',
+                            {
+                                bubbles: true
+                            }
+                        )
+                    );
+
+                    element.dispatchEvent(
+                        new Event(
+                            'change',
+                            {
+                                bubbles: true
+                            }
+                        )
+                    );
+                }
+                """,
+                value,
+            )
+
+        actual_value = (
+            field.input_value()
+        )
+
+        if actual_value != value:
+
+            fail(
+                context,
+                46,
+                (
+                    f"{field_name} no quedó "
+                    f"configurado correctamente. "
+                    f"Esperado={value}, "
+                    f"actual={actual_value}"
+                ),
+            )
+
+        _LOGGER.info(
+            "%s configurada correctamente: %s",
+            field_name,
+            actual_value,
+        )
+
+    _LOGGER.info(
+        (
+            "Intervalo de Telelecturas "
+            "configurado correctamente: "
+            "%s -> %s."
+        ),
+        start_date,
+        end_date,
+    )
 
 # ============================================================
 # MAIN
@@ -2147,6 +2578,17 @@ def main() -> None:
 
             open_filters(
                 page
+            )
+
+            history_start_date, history_end_date = (
+                get_history_query_range()
+            )
+
+            set_date_range(
+                page,
+                context,
+                history_start_date,
+                history_end_date,
             )
 
             select_and_apply_hourly(

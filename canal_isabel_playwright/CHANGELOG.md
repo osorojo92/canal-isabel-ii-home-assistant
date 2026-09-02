@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.17] - 2026-09-02
+
+### Added
+
+- Añadida recuperación automática de huecos del histórico diario.
+- El add-on solicita datos de días anteriores mediante los filtros
+  `fechaDesde` y `fechaHasta` de Telelecturas.
+- Añadida carga inicial de hasta 30 días para completar las métricas
+  históricas.
+- Cuando el histórico está completo, se refrescan los últimos 7 días
+  para recoger posibles correcciones posteriores de Canal.
+- El día actual queda excluido del histórico hasta que haya finalizado.
+
+### Changed
+
+- La descarga CSV puede contener ahora varios días de telelecturas horarias.
+- `canal_historico_diario.json` se autorrepara cuando detecta días ausentes.
+
 ## [1.0.16] - 2026-08-29
 
 ### Added
