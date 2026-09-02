@@ -35,6 +35,9 @@ SESSION_STORAGE_FILE = CONFIG_DIR / "canal_session_storage.json"
 HISTORY_BOOTSTRAP_DAYS = 30
 HISTORY_REFRESH_DAYS = 7
 
+# Un día se considera completo cuando Canal entrega
+# al menos 23 registros horarios.
+MIN_COMPLETE_HOURS = 23
 
 # ============================================================
 # URL
@@ -391,28 +394,51 @@ def session_is_valid(
 # DIAGNÓSTICO DE RED
 # ============================================================
 
+def is_relevant_network_url(
+    raw_url: str,
+) -> bool:
+    """
+    Solo registra las peticiones reales al flujo de consumo
+    de Canal.
+
+    Excluye:
+    - CSS
+    - JavaScript
+    - imágenes
+    - Google Analytics
+    - recursos auxiliares de Liferay
+    """
+
+    url = raw_url.lower()
+
+    return url.startswith(
+        (
+            "https://oficinavirtual."
+            "canaldeisabelsegunda.es/"
+            "group/ovir/consumo"
+        )
+    )
+
+
 def log_request(
     request,
 ) -> None:
 
-    url = (
-        request
-        .url
-        .lower()
+    if not is_relevant_network_url(
+        request.url
+    ):
+        return
+
+    _LOGGER.info(
+        "REQUEST %s %s",
+        request.method,
+        request.url,
     )
 
-    if (
-        "consumo" in url
-        or "periodic" in url
-        or "telelectura" in url
-        or "export" in url
-    ):
-
-        _LOGGER.info(
-            "REQUEST %s %s",
-            request.method,
-            request.url,
-        )
+    # El cuerpo POST nos interesa especialmente porque
+    # permite comprobar las fechas y la periodicidad
+    # realmente enviadas a Canal.
+    if request.method.upper() == "POST":
 
         try:
 
@@ -433,25 +459,16 @@ def log_response(
     response,
 ) -> None:
 
-    url = (
-        response
-        .url
-        .lower()
-    )
-
-    if (
-        "consumo" in url
-        or "periodic" in url
-        or "telelectura" in url
-        or "export" in url
+    if not is_relevant_network_url(
+        response.url
     ):
+        return
 
-        _LOGGER.info(
-            "RESPONSE %s %s",
-            response.status,
-            response.url,
-        )
-
+    _LOGGER.info(
+        "RESPONSE %s %s",
+        response.status,
+        response.url,
+    )
 
 # ============================================================
 # ABRIR FILTROS
@@ -1803,17 +1820,74 @@ def update_history(
     new_days = 0
     updated_days = 0
 
+    incomplete_days = 0
+    removed_incomplete_days = 0
+
     for fecha_iso, data in (
         parsed_data[
             "dias"
         ].items()
     ):
 
+        horas = data.get(
+            "horas",
+            {},
+        )
+
+        horas_recibidas = len(
+            horas
+        )
+
+        # ----------------------------------------------------
+        # NO guardar días incompletos
+        # ----------------------------------------------------
+
+        if (
+            horas_recibidas
+            < MIN_COMPLETE_HOURS
+        ):
+
+            incomplete_days += 1
+
+            # Si una versión anterior guardó ese día como
+            # válido, lo eliminamos automáticamente.
+            if fecha_iso in days:
+
+                del days[
+                    fecha_iso
+                ]
+
+                removed_incomplete_days += 1
+
+                _LOGGER.warning(
+                    (
+                        "Día %s eliminado del histórico: "
+                        "solo contiene %s horas."
+                    ),
+                    fecha_iso,
+                    horas_recibidas,
+                )
+
+            else:
+
+                _LOGGER.warning(
+                    (
+                        "Día %s ignorado: "
+                        "solo contiene %s horas."
+                    ),
+                    fecha_iso,
+                    horas_recibidas,
+                )
+
+            continue
+
+        # ----------------------------------------------------
+        # Día completo
+        # ----------------------------------------------------
+
         summary = build_day_summary(
             fecha_iso,
-            data[
-                "horas"
-            ],
+            horas,
         )
 
         if fecha_iso in days:
@@ -1829,6 +1903,10 @@ def update_history(
         ] = summary[
             "consumo_total_l"
         ]
+
+    # --------------------------------------------------------
+    # Orden cronológico
+    # --------------------------------------------------------
 
     history[
         "dias"
@@ -1880,6 +1958,19 @@ def update_history(
     _LOGGER.info(
         "  Días existentes actualizados: %s",
         updated_days,
+    )
+
+    _LOGGER.info(
+        "  Días incompletos ignorados: %s",
+        incomplete_days,
+    )
+
+    _LOGGER.info(
+        (
+            "  Días incompletos eliminados "
+            "del histórico: %s"
+        ),
+        removed_incomplete_days,
     )
 
     _LOGGER.info(
@@ -2092,19 +2183,80 @@ def generate_summary_files(
         parsed_data
     )
 
-    # El CSV normal contiene un único día.
-    # Si Canal devuelve varios en el futuro,
-    # usamos el más reciente para canal_resumen.json.
-    latest_date_iso = max(
+    # ------------------------------------------------------------
+    # Solo utilizar días completos para canal_resumen.json
+    # ------------------------------------------------------------
+
+    complete_days = {
+
+        fecha_iso: data
+
+        for fecha_iso, data
+        in parsed_data[
+            "dias"
+        ].items()
+
+        if len(
+            data.get(
+                "horas",
+                {},
+            )
+        ) >= MIN_COMPLETE_HOURS
+    }
+
+    if not complete_days:
+
+        fail(
+            context,
+            76,
+            (
+                "El CSV no contiene ningún día "
+                f"con al menos {MIN_COMPLETE_HOURS} "
+                "horas de datos."
+            ),
+        )
+
+    latest_received_date_iso = max(
         parsed_data[
             "dias"
         ].keys()
     )
 
+    latest_date_iso = max(
+        complete_days.keys()
+    )
+
+    if (
+        latest_received_date_iso
+        != latest_date_iso
+    ):
+
+        latest_received_hours = len(
+            parsed_data[
+                "dias"
+            ][
+                latest_received_date_iso
+            ]
+            .get(
+                "horas",
+                {},
+            )
+        )
+
+        _LOGGER.warning(
+            (
+                "El último día recibido (%s) "
+                "está incompleto: %s horas. "
+                "El resumen utilizará el último "
+                "día completo: %s."
+            ),
+            latest_received_date_iso,
+            latest_received_hours,
+            latest_date_iso,
+        )
+
     latest_data = (
-        parsed_data[
-            "dias"
-        ][
+        complete_days[
             latest_date_iso
         ]
     )
@@ -2350,8 +2502,23 @@ def get_history_query_range() -> tuple[date, date]:
 
     if missing_dates:
 
-        start_date = min(
+        first_missing_date = min(
             missing_dates
+        )
+
+        refresh_start_date = (
+            end_date
+            - timedelta(
+                days=HISTORY_REFRESH_DAYS - 1
+            )
+        )
+
+        # Aunque solo falte ayer, solicitamos como mínimo
+        # la ventana de refresco. De esta forma siempre
+        # disponemos también de días completos anteriores.
+        start_date = min(
+            first_missing_date,
+            refresh_start_date,
         )
 
         _LOGGER.info(
@@ -2365,6 +2532,14 @@ def get_history_query_range() -> tuple[date, date]:
             ),
             min(missing_dates),
             max(missing_dates),
+        )
+
+        _LOGGER.info(
+            (
+                "Se solicitará como mínimo una ventana "
+                "de %s días para mantener datos completos."
+            ),
+            HISTORY_REFRESH_DAYS,
         )
 
         if len(missing_dates) <= 10:

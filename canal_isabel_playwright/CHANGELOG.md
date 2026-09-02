@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.20] - 2026-09-03
+
+### Fixed
+
+- Los días con menos de 23 registros horarios ya no se consideran días completos.
+- Los días incompletos no se incorporan a `canal_historico_diario.json`.
+- Si una versión anterior almacenó un día incompleto, se elimina automáticamente al volver a recibirlo.
+- `canal_resumen.json` utiliza ahora el último día completo disponible.
+- La recuperación de huecos consulta como mínimo una ventana de 7 días para disponer siempre de días completos anteriores.
+- Evitado que un día parcialmente publicado por Canal altere medias, máximos, mínimos y comparativas.
+
+### Changed
+
+- Reducido el diagnóstico de red a las peticiones reales de `/group/ovir/consumo`.
+- Eliminados del log los recursos CSS, JavaScript, imágenes, Google Analytics y otros recursos auxiliares de Liferay.
+- Se mantiene el cuerpo de las peticiones POST de Telelecturas para verificar fechas y periodicidad.
+
 ## [1.0.19] - 2026-09-03
 
 ### Fixed
