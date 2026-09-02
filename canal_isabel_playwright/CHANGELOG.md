@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.18] - 2026-09-02
+
+### Fixed
+
+- Sustituida la descarga de noVNC mediante `git clone` por descarga directa del archivo oficial de la versión 1.6.0.
+- Evitado el fallo de construcción del add-on cuando Git no puede acceder de forma anónima a GitHub durante el Docker build.
+
 ## [1.0.17] - 2026-09-02
 
 ### Added
