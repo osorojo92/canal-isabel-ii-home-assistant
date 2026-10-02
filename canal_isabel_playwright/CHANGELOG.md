@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1] - 2026-10-02
+
+### Fixed
+
+- Se conservan facturas extraordinarias o antiguas que no incluyen periodo de facturación.
+- Los campos `periodo_desde` y `periodo_hasta` pueden ser nulos sin descartar la factura.
+- Se mantienen facturas con consumo 0 m³; su coste efectivo por m³ queda sin valor para evitar divisiones inválidas.
+
 ## [1.1.0] - 2026-10-02
 
 ### Added
