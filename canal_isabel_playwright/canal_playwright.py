@@ -2757,6 +2757,23 @@ def parse_invoice_date(value: str) -> date:
     ).date()
 
 
+def parse_optional_invoice_date(
+    value: str,
+) -> date | None:
+    """Convierte una fecha de factura permitiendo campos vacíos."""
+
+    raw = str(
+        value or ""
+    ).strip()
+
+    if not raw:
+        return None
+
+    return parse_invoice_date(
+        raw
+    )
+
+
 def parse_invoice_decimal(value: str) -> float:
     raw = (
         str(value)
@@ -2799,11 +2816,11 @@ def build_invoices_json(
                 row.get("CONSUMO", "0")
             )
 
-            period_from = parse_invoice_date(
+            period_from = parse_optional_invoice_date(
                 row.get("PERIODO DESDE", "")
             )
 
-            period_to = parse_invoice_date(
+            period_to = parse_optional_invoice_date(
                 row.get("PERIODO HASTA", "")
             )
 
@@ -2842,8 +2859,16 @@ def build_invoices_json(
                     3,
                 ),
                 "coste_efectivo_m3_eur": effective_cost,
-                "periodo_desde": period_from.isoformat(),
-                "periodo_hasta": period_to.isoformat(),
+                "periodo_desde": (
+                    period_from.isoformat()
+                    if period_from
+                    else None
+                ),
+                "periodo_hasta": (
+                    period_to.isoformat()
+                    if period_to
+                    else None
+                ),
                 "estado": row.get(
                     "ESTADO",
                     "",
