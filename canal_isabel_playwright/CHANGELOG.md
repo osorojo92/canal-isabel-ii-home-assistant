@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.21] - 2026-10-02
+
+### Fixed
+
+- El modo auto vuelve a utilizar el mismo perfil persistente de Chromium que el modo login.
+- Se evita reconstruir la sesión exclusivamente en un contexto nuevo a partir del estado guardado.
+- Se mantienen los mecanismos complementarios de persistencia de sesión.
+- No se modifica la arquitectura de noVNC, nginx ni el flujo de autenticación manual.
+
 ## [1.0.20] - 2026-09-03
 
 ### Fixed
