@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.1.0] - 2026-10-02
+
+### Added
+
+- Descarga automática del CSV de facturas desde Facturas y consumo.
+- Nuevo fichero `/share/canal_facturas.csv` con la exportación original de Canal.
+- Nuevo fichero `/share/canal_facturas.json` preparado para Home Assistant.
+- Datos de última factura, consumo facturado, coste efectivo por m³, periodo y estado.
+- Total neto y media de facturas de los últimos 12 meses.
+- Histórico compacto de las 24 facturas más recientes para gráficas Lovelace.
+- La descarga de facturas se limita a una vez al día.
+
+### Changed
+
+- Los errores de facturación no bloquean la actualización de Telelecturas.
+
 ## [1.0.21] - 2026-10-02
 
 ### Fixed
