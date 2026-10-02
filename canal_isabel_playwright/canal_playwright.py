@@ -30,6 +30,9 @@ STATUS_FILE = SHARE_DIR / "canal_estado.json"
 RESUMEN_FILE = SHARE_DIR / "canal_resumen.json"
 HISTORICO_FILE = SHARE_DIR / "canal_historico_diario.json"
 
+FACTURAS_CSV_FILE = SHARE_DIR / "canal_facturas.csv"
+FACTURAS_FILE = SHARE_DIR / "canal_facturas.json"
+
 SESSION_FILE = CONFIG_DIR / "canal_session.json"
 SESSION_STORAGE_FILE = CONFIG_DIR / "canal_session_storage.json"
 
@@ -47,6 +50,11 @@ MIN_COMPLETE_HOURS = 23
 CONSUMO_URL = (
     "https://oficinavirtual.canaldeisabelsegunda.es/"
     "group/ovir/consumo"
+)
+
+FACTURAS_URL = (
+    "https://oficinavirtual.canaldeisabelsegunda.es/"
+    "group/ovir/facturas-y-consumo"
 )
 
 
@@ -2722,6 +2730,330 @@ def set_date_range(
     )
 
 # ============================================================
+# FACTURACIÓN
+# ============================================================
+
+def should_refresh_invoices() -> bool:
+    """Actualiza facturas como máximo una vez al día."""
+
+    if not FACTURAS_FILE.exists():
+        return True
+
+    try:
+        modified = datetime.fromtimestamp(
+            FACTURAS_FILE.stat().st_mtime
+        ).astimezone().date()
+
+        return modified < datetime.now().astimezone().date()
+
+    except Exception:
+        return True
+
+
+def parse_invoice_date(value: str) -> date:
+    return datetime.strptime(
+        value.strip(),
+        "%d/%m/%Y",
+    ).date()
+
+
+def parse_invoice_decimal(value: str) -> float:
+    raw = (
+        str(value)
+        .strip()
+        .replace("€", "")
+        .replace(" ", "")
+    )
+
+    if "," in raw and "." not in raw:
+        raw = raw.replace(",", ".")
+
+    return float(
+        Decimal(raw or "0")
+    )
+
+
+def build_invoices_json(
+    content: str,
+) -> dict:
+    """Convierte Facturas.csv en un JSON compacto para Home Assistant."""
+
+    reader = csv.DictReader(
+        io.StringIO(content)
+    )
+
+    invoices = []
+
+    for row in reader:
+
+        try:
+            invoice_date = parse_invoice_date(
+                row.get("FECHA", "")
+            )
+
+            amount = parse_invoice_decimal(
+                row.get("IMPORTE", "0")
+            )
+
+            consumption = parse_invoice_decimal(
+                row.get("CONSUMO", "0")
+            )
+
+            period_from = parse_invoice_date(
+                row.get("PERIODO DESDE", "")
+            )
+
+            period_to = parse_invoice_date(
+                row.get("PERIODO HASTA", "")
+            )
+
+        except (
+            ValueError,
+            InvalidOperation,
+        ):
+            _LOGGER.warning(
+                "Factura ignorada por formato no reconocido: %s",
+                row,
+            )
+            continue
+
+        effective_cost = (
+            round(
+                amount / consumption,
+                4,
+            )
+            if consumption
+            else None
+        )
+
+        invoices.append(
+            {
+                "factura": row.get(
+                    "FACTURA",
+                    "",
+                ).strip(),
+                "fecha": invoice_date.isoformat(),
+                "importe_eur": round(
+                    amount,
+                    2,
+                ),
+                "consumo_m3": round(
+                    consumption,
+                    3,
+                ),
+                "coste_efectivo_m3_eur": effective_cost,
+                "periodo_desde": period_from.isoformat(),
+                "periodo_hasta": period_to.isoformat(),
+                "estado": row.get(
+                    "ESTADO",
+                    "",
+                ).strip(),
+                "tipo_calculo": row.get(
+                    "TIPO CALCULO",
+                    "",
+                ).strip(),
+            }
+        )
+
+    if not invoices:
+        raise ValueError(
+            "El CSV de facturas no contiene facturas válidas."
+        )
+
+    invoices.sort(
+        key=lambda item: (
+            item["fecha"],
+            item["factura"],
+        ),
+        reverse=True,
+    )
+
+    latest = invoices[0]
+
+    today = datetime.now().astimezone().date()
+    cutoff = today - timedelta(days=365)
+
+    invoices_12m = [
+        item
+        for item in invoices
+        if date.fromisoformat(
+            item["fecha"]
+        ) >= cutoff
+    ]
+
+    total_12m = round(
+        sum(
+            item["importe_eur"]
+            for item in invoices_12m
+        ),
+        2,
+    )
+
+    average_12m = round(
+        (
+            total_12m
+            / len(invoices_12m)
+        ),
+        2,
+    ) if invoices_12m else 0.0
+
+    return {
+        "estado": "ok",
+        "ultima_actualizacion": (
+            datetime.now()
+            .astimezone()
+            .isoformat()
+        ),
+        "fecha_ultima_factura": latest["fecha"],
+        "importe_ultima_factura_eur": latest["importe_eur"],
+        "consumo_ultima_factura_m3": latest["consumo_m3"],
+        "coste_efectivo_m3_ultima_factura_eur": (
+            latest["coste_efectivo_m3_eur"]
+        ),
+        "numero_ultima_factura": latest["factura"],
+        "estado_ultima_factura": latest["estado"],
+        "periodo_desde_ultima_factura": latest["periodo_desde"],
+        "periodo_hasta_ultima_factura": latest["periodo_hasta"],
+        "total_facturado_12m_eur": total_12m,
+        "media_facturas_12m_eur": average_12m,
+        "numero_facturas_12m": len(invoices_12m),
+        "numero_facturas_total": len(invoices),
+        # Limitamos atributos en HA a las 24 facturas más recientes.
+        "facturas": invoices[:24],
+    }
+
+
+def download_and_process_invoices(
+    page,
+) -> None:
+    """Descarga y procesa Facturas.csv una vez al día."""
+
+    if not should_refresh_invoices():
+        _LOGGER.info(
+            "Facturas ya actualizadas hoy. Se omite la descarga."
+        )
+        return
+
+    _LOGGER.info(
+        "Actualizando histórico de facturas..."
+    )
+
+    page.goto(
+        FACTURAS_URL,
+        wait_until="domcontentloaded",
+        timeout=60000,
+    )
+
+    page.wait_for_timeout(
+        3000
+    )
+
+    if not session_is_valid(page):
+        raise RuntimeError(
+            "La sesión dejó de ser válida al abrir Facturas."
+        )
+
+    selectors = [
+        'a[href*="listadoFacturasConsumo"][href*="export"]',
+        'a[href*="export"][href*="fileFormat=CSV"]',
+        'a:has-text("CSV")',
+    ]
+
+    export_link = None
+
+    for selector in selectors:
+        candidate = page.locator(
+            selector
+        )
+
+        if candidate.count() > 0:
+            export_link = candidate.last
+            _LOGGER.info(
+                "Enlace CSV de facturas encontrado con selector: %s",
+                selector,
+            )
+            break
+
+    if export_link is None:
+        raise RuntimeError(
+            "No se encuentra el enlace CSV de facturas."
+        )
+
+    export_url = export_link.get_attribute(
+        "href"
+    )
+
+    _LOGGER.info(
+        "URL de exportación de facturas localizada: %s",
+        export_url,
+    )
+
+    with page.expect_download(
+        timeout=60000
+    ) as download_info:
+        export_link.click()
+
+    download = download_info.value
+
+    download.save_as(
+        str(
+            FACTURAS_CSV_FILE
+        )
+    )
+
+    raw = FACTURAS_CSV_FILE.read_bytes()
+
+    content = None
+
+    for encoding in (
+        "utf-8-sig",
+        "utf-8",
+        "cp1252",
+        "latin-1",
+    ):
+        try:
+            content = raw.decode(
+                encoding
+            )
+            break
+        except UnicodeDecodeError:
+            continue
+
+    if content is None:
+        raise ValueError(
+            "No se puede decodificar Facturas.csv."
+        )
+
+    if (
+        "FACTURA" not in content
+        or "IMPORTE" not in content
+        or "FECHA" not in content
+    ):
+        raise ValueError(
+            "El CSV descargado no parece ser un listado de facturas."
+        )
+
+    data = build_invoices_json(
+        content
+    )
+
+    write_json_atomic(
+        FACTURAS_FILE,
+        data,
+    )
+
+    _LOGGER.info(
+        (
+            "Facturas actualizadas: %s registros. "
+            "Última factura: %s - %.2f EUR."
+        ),
+        data["numero_facturas_total"],
+        data["fecha_ultima_factura"],
+        data["importe_ultima_factura_eur"],
+    )
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -2953,6 +3285,20 @@ def main() -> None:
                 context,
                 parsed_data,
             )
+
+            # ------------------------------------------------
+            # Facturación (no bloqueante)
+            # ------------------------------------------------
+
+            try:
+                download_and_process_invoices(
+                    page
+                )
+            except Exception as err:
+                _LOGGER.warning(
+                    "No se pudieron actualizar las facturas: %s",
+                    err,
+                )
 
             # ------------------------------------------------
             # Actualizar sesión
