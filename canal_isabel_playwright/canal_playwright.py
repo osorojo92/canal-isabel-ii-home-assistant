@@ -21,6 +21,7 @@ from playwright.sync_api import (
 # ============================================================
 
 CONFIG_DIR = Path("/config")
+PROFILE_DIR = CONFIG_DIR / "browser_profile"
 SHARE_DIR = Path("/share")
 
 CSV_FILE = SHARE_DIR / "canal_consumo_horario.csv"
@@ -2768,8 +2769,14 @@ def main() -> None:
         # Chromium visible dentro de Xvfb.
         # ----------------------------------------------------
 
-        browser = p.chromium.launch(
+        context = p.chromium.launch_persistent_context(
+            user_data_dir=str(PROFILE_DIR),
             headless=False,
+            viewport={
+                "width": 1360,
+                "height": 850,
+            },
+            accept_downloads=True,
             args=[
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
@@ -2777,22 +2784,12 @@ def main() -> None:
             ],
         )
 
+        _LOGGER.info(
+            "Perfil Chromium persistente cargado: %s",
+            PROFILE_DIR,
+        )
+
         try:
-
-            # ------------------------------------------------
-            # RESTAURAR STORAGE_STATE COMPLETO
-            # ------------------------------------------------
-
-            context = browser.new_context(
-                storage_state=str(
-                    SESSION_FILE
-                ),
-                viewport={
-                    "width": 1360,
-                    "height": 850,
-                },
-                accept_downloads=True,
-            )
 
             # ------------------------------------------------
             # RESTAURAR sessionStorage
@@ -2836,7 +2833,7 @@ def main() -> None:
             # Página
             # ------------------------------------------------
 
-            page = context.new_page()
+            page = context.pages[0] if context.pages else context.new_page()
 
             page.on(
                 "request",
@@ -3008,7 +3005,7 @@ def main() -> None:
         finally:
 
             try:
-                browser.close()
+                context.close()
 
             except Exception:
                 pass
