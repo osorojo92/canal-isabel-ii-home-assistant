@@ -3515,8 +3515,62 @@ def main() -> None:
 
                         _LOGGER.info(
                             (
+                                "Login automático aceptado. "
+                                "Validando acceso de nuevo "
+                                "a Telelecturas..."
+                            )
+                        )
+
+                        try:
+
+                            page.goto(
+                                CONSUMO_URL,
+                                wait_until="domcontentloaded",
+                                timeout=60000,
+                            )
+
+                            page.wait_for_timeout(
+                                3000
+                            )
+
+                        except PlaywrightTimeoutError:
+
+                            fail(
+                                context,
+                                30,
+                                (
+                                    "El login automático pareció "
+                                    "correcto, pero no se pudo "
+                                    "volver a abrir Telelecturas."
+                                ),
+                                auth=True,
+                                auth_reason=(
+                                    "auth_recovery_validation_failed"
+                                ),
+                            )
+
+                        if not session_is_valid(
+                            page
+                        ):
+
+                            fail(
+                                context,
+                                30,
+                                (
+                                    "El login automático no dejó "
+                                    "una sesión válida al volver "
+                                    "a Telelecturas."
+                                ),
+                                auth=True,
+                                auth_reason=(
+                                    "auth_recovery_validation_failed"
+                                ),
+                            )
+
+                        _LOGGER.info(
+                            (
                                 "Sesión recuperada "
-                                "automáticamente."
+                                "automáticamente y validada."
                             )
                         )
 
