@@ -8,3 +8,15 @@ configuration:
   startup_delay:
     name: "Startup delay (seconds)"
     description: "Delay before the first download after the add-on starts."
+  auto_relogin:
+    name: "Automatic session recovery"
+    description: "If the session expires, perform one automatic login attempt per incident."
+  username:
+    name: "Username"
+    description: "Canal Virtual Office login username."
+  password:
+    name: "Password"
+    description: "Login password. It is masked in the add-on interface."
+  user_type:
+    name: "User type"
+    description: "Text of the user type to select during login. Default: particular."
