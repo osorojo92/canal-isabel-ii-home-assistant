@@ -53,6 +53,7 @@ PY
 
 COPY canal_playwright.py /app/canal_playwright.py
 COPY auth_browser.py /app/auth_browser.py
+COPY auto_login.py /app/auto_login.py
 
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY vnc-ha.html /opt/novnc/vnc-ha.html
