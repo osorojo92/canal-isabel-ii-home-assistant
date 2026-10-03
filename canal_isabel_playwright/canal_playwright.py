@@ -4,8 +4,11 @@ import csv
 import io
 import json
 import logging
+import os
 import re
 import sys
+import urllib.error
+import urllib.request
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -35,6 +38,13 @@ FACTURAS_FILE = SHARE_DIR / "canal_facturas.json"
 
 SESSION_FILE = CONFIG_DIR / "canal_session.json"
 SESSION_STORAGE_FILE = CONFIG_DIR / "canal_session_storage.json"
+AUTH_EVENT_MARKER = CONFIG_DIR / "canal_auth_required_event_sent.json"
+
+HA_EVENT_TYPE = "canal_isabel_ii_event"
+HA_EVENT_URL = (
+    "http://supervisor/core/api/events/"
+    + HA_EVENT_TYPE
+)
 
 HISTORY_BOOTSTRAP_DAYS = 30
 HISTORY_REFRESH_DAYS = 7
@@ -145,6 +155,193 @@ def write_status(
 
 
 # ============================================================
+# EVENTOS HOME ASSISTANT
+# ============================================================
+
+def fire_home_assistant_event(
+    event_data: dict,
+) -> bool:
+    """
+    Publica un evento genérico en el bus de Home Assistant.
+
+    El add-on no decide cómo notificar al usuario. Cada instalación
+    puede reaccionar al evento con sus propias automatizaciones.
+    """
+
+    token = os.environ.get(
+        "SUPERVISOR_TOKEN"
+    )
+
+    if not token:
+        _LOGGER.warning(
+            (
+                "No existe SUPERVISOR_TOKEN; "
+                "no se puede publicar el evento %s."
+            ),
+            HA_EVENT_TYPE,
+        )
+        return False
+
+    payload = json.dumps(
+        event_data,
+        ensure_ascii=False,
+    ).encode(
+        "utf-8"
+    )
+
+    request = urllib.request.Request(
+        HA_EVENT_URL,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+
+        with urllib.request.urlopen(
+            request,
+            timeout=10,
+        ) as response:
+
+            status = getattr(
+                response,
+                "status",
+                200,
+            )
+
+            if 200 <= status < 300:
+
+                _LOGGER.info(
+                    "Evento Home Assistant publicado: %s",
+                    HA_EVENT_TYPE,
+                )
+
+                return True
+
+            _LOGGER.warning(
+                (
+                    "Home Assistant respondió %s "
+                    "al publicar el evento %s."
+                ),
+                status,
+                HA_EVENT_TYPE,
+            )
+
+    except urllib.error.HTTPError as err:
+
+        _LOGGER.warning(
+            (
+                "Error HTTP publicando evento "
+                "Home Assistant: %s"
+            ),
+            err,
+        )
+
+    except Exception as err:
+
+        _LOGGER.warning(
+            (
+                "No se pudo publicar evento "
+                "Home Assistant: %s"
+            ),
+            err,
+        )
+
+    return False
+
+
+def emit_auth_required_once(
+    code: int,
+    message: str,
+    reason: str = "session_expired",
+) -> None:
+    """
+    Emite una sola vez el evento auth_required mientras persista
+    el mismo incidente de autenticación.
+
+    La marca se guarda en addon_config para sobrevivir a reinicios
+    y a las ejecuciones periódicas del add-on.
+    """
+
+    if AUTH_EVENT_MARKER.exists():
+
+        _LOGGER.info(
+            (
+                "El evento de autenticación requerida "
+                "ya fue emitido; no se repetirá."
+            )
+        )
+
+        return
+
+    event_data = {
+        "type": "auth_required",
+        "reason": reason,
+        "code": code,
+        "message": message,
+        "source": "canal_isabel_ii_playwright",
+        "occurred_at": (
+            datetime
+            .now()
+            .astimezone()
+            .isoformat()
+        ),
+    }
+
+    if not fire_home_assistant_event(
+        event_data
+    ):
+        return
+
+    try:
+
+        write_json_atomic(
+            AUTH_EVENT_MARKER,
+            event_data,
+        )
+
+    except Exception as err:
+
+        _LOGGER.warning(
+            (
+                "Evento emitido, pero no se pudo "
+                "guardar la marca antirrepetición: %s"
+            ),
+            err,
+        )
+
+
+def clear_auth_required_event_marker() -> None:
+    """
+    Rearma el aviso después de recuperar una sesión válida.
+    """
+
+    if not AUTH_EVENT_MARKER.exists():
+        return
+
+    try:
+
+        AUTH_EVENT_MARKER.unlink()
+
+        _LOGGER.info(
+            "Aviso de autenticación rearmado."
+        )
+
+    except Exception as err:
+
+        _LOGGER.warning(
+            (
+                "No se pudo rearmar el aviso "
+                "de autenticación: %s"
+            ),
+            err,
+        )
+
+
+# ============================================================
 # ERROR CONTROLADO
 # ============================================================
 
@@ -168,6 +365,13 @@ def fail(
         message,
         code,
     )
+
+    if auth:
+
+        emit_auth_required_once(
+            code,
+            message,
+        )
 
     try:
         context.close()
@@ -3100,13 +3304,21 @@ def main() -> None:
 
     if not SESSION_FILE.exists():
 
+        message = (
+            "No existe sesión guardada. "
+            "Cambia mode a login."
+        )
+
         write_status(
             "reautenticacion_requerida",
-            (
-                "No existe sesión guardada. "
-                "Cambia mode a login."
-            ),
+            message,
             30,
+        )
+
+        emit_auth_required_once(
+            30,
+            message,
+            reason="session_missing",
         )
 
         raise SystemExit(
@@ -3368,6 +3580,8 @@ def main() -> None:
                 0,
                 size,
             )
+
+            clear_auth_required_event_marker()
 
             _LOGGER.info(
                 "Proceso completado correctamente."
