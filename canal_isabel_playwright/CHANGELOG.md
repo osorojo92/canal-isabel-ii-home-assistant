@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.0] - 2026-10-03
+
+### Added
+
+- Integración con el bus de eventos de Home Assistant mediante la API interna del Supervisor.
+- Nuevo evento genérico `canal_isabel_ii_event`.
+- Evento `type: auth_required` cuando falta la sesión o deja de ser válida.
+- Datos del evento: `reason`, `code`, `message`, `source` y `occurred_at`.
+- Protección antirrepetición persistente para emitir un único aviso por incidencia de autenticación.
+
+### Changed
+
+- El add-on declara `homeassistant_api: true`.
+- El aviso de autenticación se rearma al guardar una nueva sesión manual o tras una ejecución automática correcta.
+- El add-on permanece desacoplado de Telegram, servicios `notify.*` y scripts particulares de cada instalación.
+
 ## [1.1.1] - 2026-10-02
 
 ### Fixed
