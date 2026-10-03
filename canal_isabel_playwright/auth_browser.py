@@ -22,6 +22,7 @@ STATUS_FILE = Path("/share/canal_estado.json")
 
 SESSION_FILE = CONFIG_DIR / "canal_session.json"
 SESSION_STORAGE_FILE = CONFIG_DIR / "canal_session_storage.json"
+AUTH_EVENT_MARKER = CONFIG_DIR / "canal_auth_required_event_sent.json"
 
 
 # ============================================================
@@ -51,6 +52,34 @@ logging.basicConfig(
 )
 
 _LOGGER = logging.getLogger("canal-auth")
+
+
+# ============================================================
+# REARMAR AVISO DE AUTENTICACIÓN
+# ============================================================
+
+def clear_auth_required_event_marker() -> None:
+
+    if not AUTH_EVENT_MARKER.exists():
+        return
+
+    try:
+
+        AUTH_EVENT_MARKER.unlink()
+
+        _LOGGER.info(
+            "Aviso de autenticación rearmado."
+        )
+
+    except Exception as err:
+
+        _LOGGER.warning(
+            (
+                "No se pudo rearmar el aviso "
+                "de autenticación: %s"
+            ),
+            err,
+        )
 
 
 # ============================================================
@@ -742,6 +771,8 @@ def main() -> None:
                         ):
 
                             authenticated_once = True
+
+                            clear_auth_required_event_marker()
 
 
                             write_status(

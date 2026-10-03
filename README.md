@@ -12,6 +12,8 @@ Add-on para Home Assistant que descarga automáticamente las telelecturas del Ca
 - Selección automática de consumo horario.
 - CSV en `/share/canal_consumo_horario.csv`.
 - Estado en `/share/canal_estado.json`.
+- Evento genérico de Home Assistant cuando es necesario volver a autenticarse.
+- El aviso de autenticación se emite una sola vez por incidencia, aunque el proceso se ejecute periódicamente.
 
 ## Instalación
 
@@ -38,7 +40,7 @@ No es necesario copiar `JSESSIONID` ni `canal_state.json`.
 
 En modo `auto` el add-on abre Telelecturas con Chromium headless, selecciona frecuencia horaria, descarga el CSV y espera el intervalo configurado.
 
-Si la sesión caduca, no intenta resolver ni eludir el CAPTCHA automáticamente. Cambia a `mode: login`, autentícate manualmente y vuelve después a `mode: auto`.
+Si la sesión caduca, no intenta resolver ni eludir el CAPTCHA automáticamente. El add-on publica el evento `canal_isabel_ii_event` con `type: auth_required` una sola vez por incidencia, para que cada usuario pueda gestionarlo mediante una automatización propia. Cambia a `mode: login`, autentícate manualmente y vuelve después a `mode: auto`.
 
 ## Seguridad
 
