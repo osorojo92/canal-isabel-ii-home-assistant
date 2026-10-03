@@ -14,6 +14,8 @@ Add-on para Home Assistant que descarga automáticamente las telelecturas del Ca
 - Estado en `/share/canal_estado.json`.
 - Evento genérico de Home Assistant cuando es necesario volver a autenticarse.
 - El aviso de autenticación se emite una sola vez por incidencia, aunque el proceso se ejecute periódicamente.
+- Recuperación automática opcional de sesiones caducadas con un único intento por incidencia.
+- Evento `auth_recovered` cuando la sesión se recupera automáticamente.
 
 ## Instalación
 
@@ -40,11 +42,17 @@ No es necesario copiar `JSESSIONID` ni `canal_state.json`.
 
 En modo `auto` el add-on abre Telelecturas con Chromium headless, selecciona frecuencia horaria, descarga el CSV y espera el intervalo configurado.
 
-Si la sesión caduca, no intenta resolver ni eludir el CAPTCHA automáticamente. El add-on publica el evento `canal_isabel_ii_event` con `type: auth_required` una sola vez por incidencia, para que cada usuario pueda gestionarlo mediante una automatización propia. Cambia a `mode: login`, autentícate manualmente y vuelve después a `mode: auto`.
+Si la sesión caduca y `auto_relogin` está activado, el add-on realiza un único intento automático de login usando las credenciales configuradas. Si funciona, renueva la sesión, continúa la descarga y publica `canal_isabel_ii_event` con `type: auth_recovered`.
+
+Si aparece CAPTCHA o el intento automático falla, no vuelve a insistir en las siguientes ejecuciones de esa misma incidencia. Publica `type: auth_required` una sola vez para que el usuario pueda reaccionar mediante una automatización propia. El CAPTCHA nunca se intenta resolver ni eludir automáticamente.
+
+Las credenciales se configuran en las opciones del add-on mediante `username`, `password` y `user_type`. La contraseña se muestra enmascarada en la interfaz.
 
 ## Seguridad
 
 El perfil del navegador contiene una sesión autenticada. Se guarda en el directorio privado `addon_config` del add-on y no debe publicarse ni subirse a GitHub.
+
+Si se activa `auto_relogin`, las credenciales se almacenan en la configuración privada del add-on. El código no las escribe en logs, eventos ni ficheros de `/share`.
 
 ## Aviso
 
