@@ -1,5 +1,5 @@
 name: "Canal Isabel II Playwright"
-version: "1.1.1"
+version: "1.2.0"
 slug: "canal_isabel_playwright"
 
 description: >-
@@ -12,6 +12,8 @@ startup: services
 boot: auto
 init: false
 stage: stable
+
+homeassistant_api: true
 
 arch:
   - amd64
