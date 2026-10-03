@@ -198,8 +198,11 @@ def captcha_is_visible(
     selectors = [
         'iframe[src*="recaptcha"]',
         'iframe[title*="reCAPTCHA"]',
+        'iframe[src*="hcaptcha"]',
+        'iframe[src*="turnstile"]',
         '[id*="captcha"]',
         '[class*="captcha"]',
+        '[class*="h-captcha"]',
     ]
 
     for selector in selectors:
@@ -235,7 +238,6 @@ def captcha_is_visible(
         )
 
         captcha_texts = (
-            "captcha",
             "no soy un robot",
             "i'm not a robot",
         )
@@ -604,28 +606,80 @@ def attempt_auto_relogin(
             ),
         }
 
-    username_field = _first_visible(
-        page,
-        [
-            'input[autocomplete="username"]',
-            'input[name*="usuario"]',
-            'input[id*="usuario"]',
-            'input[name*="user"]',
-            'input[id*="user"]',
-            'input[name*="nif"]',
-            'input[id*="nif"]',
-            'input[name*="document"]',
-            'input[id*="document"]',
-            'input[type="text"]',
-        ],
-    )
-
     password_field = _first_visible(
         page,
         [
             'input[type="password"]',
         ],
     )
+
+    username_field = None
+
+    if password_field is not None:
+
+        try:
+
+            form = password_field.locator(
+                "xpath=ancestor::form[1]"
+            )
+
+            if form.count() > 0:
+
+                selectors = [
+                    'input[autocomplete="username"]',
+                    'input[name*="usuario"]',
+                    'input[id*="usuario"]',
+                    'input[name*="user"]',
+                    'input[id*="user"]',
+                    'input[name*="nif"]',
+                    'input[id*="nif"]',
+                    'input[name*="document"]',
+                    'input[id*="document"]',
+                    'input[type="text"]',
+                ]
+
+                for selector in selectors:
+
+                    candidates = form.first.locator(
+                        selector
+                    )
+
+                    for index in range(
+                        candidates.count()
+                    ):
+
+                        candidate = candidates.nth(
+                            index
+                        )
+
+                        if candidate.is_visible():
+
+                            username_field = candidate
+                            break
+
+                    if username_field is not None:
+                        break
+
+        except Exception:
+            pass
+
+    if username_field is None:
+
+        username_field = _first_visible(
+            page,
+            [
+                'input[autocomplete="username"]',
+                'input[name*="usuario"]',
+                'input[id*="usuario"]',
+                'input[name*="user"]',
+                'input[id*="user"]',
+                'input[name*="nif"]',
+                'input[id*="nif"]',
+                'input[name*="document"]',
+                'input[id*="document"]',
+                'input[type="text"]',
+            ],
+        )
 
     if (
         username_field is None
