@@ -427,7 +427,36 @@ def _select_user_type(
 
 def _find_submit(
     page,
+    password_field,
 ):
+
+    # Prioriza el submit del mismo formulario que contiene
+    # la contraseña para evitar botones ajenos (buscador, cookies, etc.).
+    try:
+
+        form = password_field.locator(
+            "xpath=ancestor::form[1]"
+        )
+
+        if form.count() > 0:
+
+            scoped = form.first.locator(
+                'button[type="submit"], input[type="submit"]'
+            )
+
+            for index in range(
+                scoped.count()
+            ):
+
+                candidate = scoped.nth(
+                    index
+                )
+
+                if candidate.is_visible():
+                    return candidate
+
+    except Exception:
+        pass
 
     submit = _first_visible(
         page,
@@ -670,7 +699,8 @@ def attempt_auto_relogin(
         }
 
     submit = _find_submit(
-        page
+        page,
+        password_field,
     )
 
     if submit is None:
