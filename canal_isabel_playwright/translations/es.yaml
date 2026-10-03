@@ -8,3 +8,15 @@ configuration:
   startup_delay:
     name: "Espera inicial (segundos)"
     description: "Espera antes de la primera descarga tras iniciar el add-on."
+  auto_relogin:
+    name: "Recuperación automática de sesión"
+    description: "Si la sesión caduca, realiza un único intento automático de login por incidencia."
+  username:
+    name: "Usuario"
+    description: "Usuario de acceso a la Oficina Virtual del Canal."
+  password:
+    name: "Contraseña"
+    description: "Contraseña de acceso. Se muestra oculta en la interfaz del add-on."
+  user_type:
+    name: "Tipo de usuario"
+    description: "Texto del tipo de usuario a seleccionar en el login. Por defecto: particular."
