@@ -22,7 +22,24 @@ Archivos de salida:
 
 ## Renovar sesión
 
-Si los registros indican que la sesión ha caducado, cambia temporalmente a `mode: login`, vuelve a autenticarte manualmente y regresa después a `mode: auto`.
+El add-on puede intentar recuperar automáticamente una sesión caducada.
+
+Opciones disponibles:
+
+- `auto_relogin`: activa o desactiva la recuperación automática.
+- `username`: usuario de acceso.
+- `password`: contraseña de acceso; Home Assistant la muestra enmascarada.
+- `user_type`: texto del tipo de usuario que debe seleccionar el formulario; por defecto `particular`.
+
+Cuando `auto_relogin: true` y la sesión no es válida:
+
+1. El add-on realiza **un único intento automático por incidencia**.
+2. Si el login funciona, guarda la nueva sesión, continúa la ejecución y publica `type: auth_recovered`.
+3. Si aparece CAPTCHA, no intenta resolverlo. Publica `type: auth_required` y exige autenticación manual.
+4. Si el login falla por cualquier otro motivo, tampoco vuelve a intentarlo en las siguientes ejecuciones de esa misma incidencia.
+5. Al completar un login manual correcto en `mode: login`, se rearma el mecanismo para futuras incidencias.
+
+Si `auto_relogin: false`, se mantiene el comportamiento manual: cuando la sesión caduque, cambia temporalmente a `mode: login`, vuelve a autenticarte y regresa después a `mode: auto`.
 
 No es necesario copiar cookies, `JSESSIONID` ni `canal_state.json`.
 
@@ -31,12 +48,21 @@ No es necesario copiar cookies, `JSESSIONID` ni `canal_state.json`.
 
 El add-on publica eventos genéricos en el bus de Home Assistant para que cada instalación decida cómo reaccionar.
 
-Cuando la sesión falta o deja de ser válida se publica:
+Cuando la sesión requiere intervención manual se publica:
 
 - Evento: `canal_isabel_ii_event`
 - `type: auth_required`
-- `reason: session_missing` o `session_expired`
+- `reason`: causa concreta, por ejemplo `session_expired`, `captcha_required`, `credentials_missing` o `login_failed`
 - `code`: código interno del error
+- `message`: descripción
+- `source: canal_isabel_ii_playwright`
+
+Cuando el add-on recupera por sí mismo una sesión caducada se publica:
+
+- Evento: `canal_isabel_ii_event`
+- `type: auth_recovered`
+- `reason: automatic_login`
+- `trigger_reason`: `session_expired` o `session_missing`
 - `message`: descripción
 - `source: canal_isabel_ii_playwright`
 

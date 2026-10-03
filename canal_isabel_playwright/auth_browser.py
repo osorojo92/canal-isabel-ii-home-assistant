@@ -23,6 +23,9 @@ STATUS_FILE = Path("/share/canal_estado.json")
 SESSION_FILE = CONFIG_DIR / "canal_session.json"
 SESSION_STORAGE_FILE = CONFIG_DIR / "canal_session_storage.json"
 AUTH_EVENT_MARKER = CONFIG_DIR / "canal_auth_required_event_sent.json"
+AUTO_RELOGIN_ATTEMPT_MARKER = (
+    CONFIG_DIR / "canal_auto_relogin_attempted.json"
+)
 
 
 # ============================================================
@@ -76,6 +79,34 @@ def clear_auth_required_event_marker() -> None:
         _LOGGER.warning(
             (
                 "No se pudo rearmar el aviso "
+                "de autenticación: %s"
+            ),
+            err,
+        )
+
+
+# ============================================================
+# REARMAR INTENTO AUTOMÁTICO
+# ============================================================
+
+def clear_auto_relogin_attempt_marker() -> None:
+
+    if not AUTO_RELOGIN_ATTEMPT_MARKER.exists():
+        return
+
+    try:
+
+        AUTO_RELOGIN_ATTEMPT_MARKER.unlink()
+
+        _LOGGER.info(
+            "Reintento automático de autenticación rearmado."
+        )
+
+    except Exception as err:
+
+        _LOGGER.warning(
+            (
+                "No se pudo rearmar el intento automático "
                 "de autenticación: %s"
             ),
             err,
@@ -773,6 +804,7 @@ def main() -> None:
                             authenticated_once = True
 
                             clear_auth_required_event_marker()
+                            clear_auto_relogin_attempt_marker()
 
 
                             write_status(
