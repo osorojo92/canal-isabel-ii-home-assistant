@@ -1,5 +1,5 @@
 name: "Canal Isabel II Playwright"
-version: "1.2.0"
+version: "1.3.0"
 slug: "canal_isabel_playwright"
 
 description: >-
@@ -38,8 +38,16 @@ options:
   mode: "auto"
   interval_hours: 24
   startup_delay: 30
+  auto_relogin: false
+  username: ""
+  password: ""
+  user_type: "particular"
 
 schema:
   mode: "list(auto|login)"
   interval_hours: "int(1,168)"
   startup_delay: "int(0,600)"
+  auto_relogin: "bool"
+  username: "str"
+  password: "password"
+  user_type: "str"
