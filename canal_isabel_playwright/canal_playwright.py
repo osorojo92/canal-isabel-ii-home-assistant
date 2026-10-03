@@ -18,6 +18,12 @@ from playwright.sync_api import (
     sync_playwright,
 )
 
+from auto_login import (
+    attempt_auto_relogin,
+    clear_auto_relogin_attempt_marker,
+    load_auto_relogin_options,
+)
+
 
 # ============================================================
 # RUTAS
@@ -314,6 +320,33 @@ def emit_auth_required_once(
         )
 
 
+def emit_auth_recovered(
+    trigger_reason: str,
+) -> None:
+    """
+    Informa de que una sesión inválida se recuperó automáticamente.
+    """
+
+    fire_home_assistant_event(
+        {
+            "type": "auth_recovered",
+            "reason": "automatic_login",
+            "trigger_reason": trigger_reason,
+            "message": (
+                "La sesión de Canal Isabel II se ha "
+                "recuperado automáticamente."
+            ),
+            "source": "canal_isabel_ii_playwright",
+            "occurred_at": (
+                datetime
+                .now()
+                .astimezone()
+                .isoformat()
+            ),
+        }
+    )
+
+
 def clear_auth_required_event_marker() -> None:
     """
     Rearma el aviso después de recuperar una sesión válida.
@@ -350,6 +383,7 @@ def fail(
     code: int,
     message: str,
     auth: bool = False,
+    auth_reason: str = "session_expired",
 ) -> None:
 
     _LOGGER.error(
@@ -371,6 +405,7 @@ def fail(
         emit_auth_required_once(
             code,
             message,
+            reason=auth_reason,
         )
 
     try:
@@ -3299,30 +3334,21 @@ def main() -> None:
     )
 
     # --------------------------------------------------------
-    # Sesión obligatoria
+    # Configuración de recuperación automática
     # --------------------------------------------------------
 
-    if not SESSION_FILE.exists():
+    auto_relogin_options = (
+        load_auto_relogin_options()
+    )
 
-        message = (
-            "No existe sesión guardada. "
-            "Cambia mode a login."
-        )
+    session_file_exists = (
+        SESSION_FILE.exists()
+    )
 
-        write_status(
-            "reautenticacion_requerida",
-            message,
-            30,
-        )
+    if not session_file_exists:
 
-        emit_auth_required_once(
-            30,
-            message,
-            reason="session_missing",
-        )
-
-        raise SystemExit(
-            30
+        _LOGGER.warning(
+            "No existe sesión guardada."
         )
 
     with sync_playwright() as p:
@@ -3373,30 +3399,42 @@ def main() -> None:
                 session_storage,
             )
 
-            state = json.loads(
-                SESSION_FILE.read_text(
-                    encoding="utf-8"
-                )
-            )
+            if session_file_exists:
 
-            _LOGGER.info(
-                (
-                    "Storage state restaurado: "
-                    "%s cookies, %s origins."
-                ),
-                len(
-                    state.get(
-                        "cookies",
-                        [],
+                state = json.loads(
+                    SESSION_FILE.read_text(
+                        encoding="utf-8"
                     )
-                ),
-                len(
-                    state.get(
-                        "origins",
-                        [],
+                )
+
+                _LOGGER.info(
+                    (
+                        "Storage state restaurado: "
+                        "%s cookies, %s origins."
+                    ),
+                    len(
+                        state.get(
+                            "cookies",
+                            [],
+                        )
+                    ),
+                    len(
+                        state.get(
+                            "origins",
+                            [],
+                        )
+                    ),
+                )
+
+            else:
+
+                _LOGGER.info(
+                    (
+                        "Se continuará sin storage_state "
+                        "guardado para comprobar si puede "
+                        "recuperarse la sesión automáticamente."
                     )
-                ),
-            )
+                )
 
             # ------------------------------------------------
             # Página
@@ -3454,16 +3492,86 @@ def main() -> None:
                 page
             ):
 
-                fail(
-                    context,
-                    30,
-                    (
-                        "La sesión guardada ya no es válida. "
-                        "Cambia mode a login y vuelve "
-                        "a autenticarte."
-                    ),
-                    auth=True,
+                trigger_reason = (
+                    "session_expired"
+                    if session_file_exists
+                    else "session_missing"
                 )
+
+                if auto_relogin_options.get(
+                    "auto_relogin",
+                    False,
+                ):
+
+                    result = attempt_auto_relogin(
+                        page,
+                        trigger_reason,
+                    )
+
+                    if result.get(
+                        "success",
+                        False,
+                    ):
+
+                        _LOGGER.info(
+                            (
+                                "Sesión recuperada "
+                                "automáticamente."
+                            )
+                        )
+
+                        save_updated_session(
+                            context,
+                            page,
+                        )
+
+                        clear_auto_relogin_attempt_marker()
+                        clear_auth_required_event_marker()
+
+                        emit_auth_recovered(
+                            trigger_reason
+                        )
+
+                    else:
+
+                        reason = result.get(
+                            "reason",
+                            trigger_reason,
+                        )
+
+                        detail = result.get(
+                            "message",
+                            (
+                                "No se pudo recuperar "
+                                "la sesión automáticamente."
+                            ),
+                        )
+
+                        fail(
+                            context,
+                            30,
+                            (
+                                f"{detail} "
+                                "Cambia mode a login y vuelve "
+                                "a autenticarte manualmente."
+                            ),
+                            auth=True,
+                            auth_reason=reason,
+                        )
+
+                else:
+
+                    fail(
+                        context,
+                        30,
+                        (
+                            "La sesión guardada ya no es válida. "
+                            "Cambia mode a login y vuelve "
+                            "a autenticarte."
+                        ),
+                        auth=True,
+                        auth_reason=trigger_reason,
+                    )
 
             _LOGGER.info(
                 "Sesión autenticada correctamente."
@@ -3582,6 +3690,7 @@ def main() -> None:
             )
 
             clear_auth_required_event_marker()
+            clear_auto_relogin_attempt_marker()
 
             _LOGGER.info(
                 "Proceso completado correctamente."
