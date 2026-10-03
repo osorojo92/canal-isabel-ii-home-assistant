@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.3.0] - 2026-10-03
+
+### Added
+
+- Opción `auto_relogin` para recuperar automáticamente una sesión caducada.
+- Campos `username`, `password` y `user_type` en la configuración del add-on.
+- La contraseña utiliza el tipo `password` de Home Assistant y se muestra enmascarada.
+- Nuevo evento `canal_isabel_ii_event` con `type: auth_recovered` cuando el login automático recupera la sesión.
+- Motivos específicos para `auth_required`, incluidos `captcha_required`, `credentials_missing`, `login_form_not_found` y `login_failed`.
+
+### Changed
+
+- El login automático realiza un único intento por incidencia y guarda una marca persistente para evitar reintentos cada hora.
+- Si aparece CAPTCHA, se detiene la recuperación automática y se requiere login manual.
+- Un login manual correcto rearma tanto el evento de autenticación como el intento automático.
+- Las credenciales nunca se escriben en logs, eventos ni ficheros de `/share`.
+
 ## [1.2.0] - 2026-10-03
 
 ### Added
