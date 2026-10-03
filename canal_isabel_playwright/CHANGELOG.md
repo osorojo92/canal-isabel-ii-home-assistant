@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.2] - 2026-10-04
+
+### Fixed
+
+- Corregida la detección de CAPTCHA en la recuperación automática.
+- Se eliminan selectores demasiado genéricos que podían interpretar como CAPTCHA contenedores auxiliares presentes en la página de login.
+- El flujo localiza primero el formulario de acceso y rellena usuario/contraseña antes de comprobar si existe un CAPTCHA realmente bloqueante.
+- Añadido diagnóstico seguro en el log para saber si se localizaron y rellenaron los campos, si se detectó CAPTCHA y si se envió el formulario, sin mostrar credenciales.
+
 ## [1.3.0] - 2026-10-03
 
 ### Added

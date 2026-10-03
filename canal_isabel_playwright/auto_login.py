@@ -195,14 +195,18 @@ def captcha_is_visible(
     Detecta CAPTCHA visible. No intenta resolverlo ni interactuar con él.
     """
 
+    # Solo consideramos CAPTCHA cuando existe un reto reconocible.
+    # No usamos selectores genéricos como [id*="captcha"] o
+    # [class*="captcha"], porque Canal puede cargar contenedores
+    # auxiliares aunque no esté exigiendo resolver ningún reto.
     selectors = [
         'iframe[src*="recaptcha"]',
         'iframe[title*="reCAPTCHA"]',
         'iframe[src*="hcaptcha"]',
         'iframe[src*="turnstile"]',
-        '[id*="captcha"]',
-        '[class*="captcha"]',
-        '[class*="h-captcha"]',
+        '.g-recaptcha',
+        '.h-captcha',
+        '[data-sitekey]',
     ]
 
     for selector in selectors:
@@ -593,19 +597,6 @@ def attempt_auto_relogin(
         )
     )
 
-    if captcha_is_visible(
-        page
-    ):
-
-        return {
-            "success": False,
-            "reason": "captcha_required",
-            "message": (
-                "Canal solicita CAPTCHA. "
-                "Es necesaria autenticación manual."
-            ),
-        }
-
     password_field = _first_visible(
         page,
         [
@@ -695,6 +686,10 @@ def attempt_auto_relogin(
             ),
         }
 
+    _LOGGER.info(
+        "Formulario de login localizado."
+    )
+
     user_type_selected = _select_user_type(
         page,
         user_type,
@@ -719,8 +714,16 @@ def attempt_auto_relogin(
             username
         )
 
+        _LOGGER.info(
+            "Campo de usuario rellenado."
+        )
+
         password_field.fill(
             password
+        )
+
+        _LOGGER.info(
+            "Campo de contraseña rellenado."
         )
 
     except Exception as err:
@@ -743,6 +746,10 @@ def attempt_auto_relogin(
         page
     ):
 
+        _LOGGER.info(
+            "CAPTCHA bloqueante detectado antes de enviar el formulario."
+        )
+
         return {
             "success": False,
             "reason": "captcha_required",
@@ -751,6 +758,10 @@ def attempt_auto_relogin(
                 "Es necesaria autenticación manual."
             ),
         }
+
+    _LOGGER.info(
+        "No se detecta CAPTCHA bloqueante. Se enviará el formulario."
+    )
 
     submit = _find_submit(
         page,
@@ -769,6 +780,10 @@ def attempt_auto_relogin(
         }
 
     try:
+
+        _LOGGER.info(
+            "Enviando formulario de autenticación."
+        )
 
         submit.click()
 
