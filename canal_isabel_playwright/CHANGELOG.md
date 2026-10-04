@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.3.5] - 2026-10-04
+
+### Fixed
+
+- Gestión explícita de Cookiebot antes de interactuar con el login; se seleccionan solo las cookies necesarias mediante `#CybotCookiebotDialogBodyButtonDecline`.
+- Apertura explícita del modal mediante `#btnEntrar` únicamente cuando el formulario todavía no está visible.
+- Detección prioritaria del perfil Particular mediante `#radioParticularLoginDesktop` y `value="PARTICULAR"`.
+- Detección prioritaria del usuario mediante `#numeroDocumento` y de la contraseña mediante `#passwordFieldHidden`.
+- El botón final se localiza dentro del formulario de login mediante `button.btn-login`, incluyendo botones `type="button"`.
+- Se evita utilizar el botón `#btnEntrar` de la cabecera como botón de envío del formulario.
+
 ## [1.3.4] - 2026-10-04
 
 ### Fixed
