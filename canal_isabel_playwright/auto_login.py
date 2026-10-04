@@ -298,6 +298,88 @@ def _session_is_valid(
     return False
 
 
+def _dismiss_cookie_banner(
+    page,
+) -> None:
+    """Cierra Cookiebot usando solo las cookies necesarias."""
+
+    try:
+        button = page.locator(
+            "#CybotCookiebotDialogBodyButtonDecline"
+        )
+
+        if (
+            button.count() > 0
+            and button.first.is_visible()
+        ):
+            _LOGGER.info(
+                "Banner de cookies detectado. Seleccionando solo cookies necesarias."
+            )
+
+            button.first.click(
+                timeout=5000
+            )
+
+            page.wait_for_timeout(
+                500
+            )
+
+            _LOGGER.info(
+                "Banner de cookies cerrado."
+            )
+
+    except Exception as err:
+        _LOGGER.warning(
+            "No se pudo cerrar automáticamente el banner de cookies: %s",
+            err,
+        )
+
+
+def _ensure_login_form_visible(
+    page,
+) -> None:
+    """Garantiza que el formulario/modal de acceso esté visible."""
+
+    password = _first_visible(
+        page,
+        [
+            "#passwordFieldHidden",
+            'input[name$="_password"]',
+            'input[type="password"]',
+        ],
+    )
+
+    if password is not None:
+        return
+
+    try:
+        open_button = page.locator(
+            "#btnEntrar"
+        )
+
+        if (
+            open_button.count() > 0
+            and open_button.first.is_visible()
+        ):
+            _LOGGER.info(
+                "Abriendo el modal de acceso mediante #btnEntrar."
+            )
+
+            open_button.first.click(
+                timeout=5000
+            )
+
+            page.wait_for_timeout(
+                700
+            )
+
+    except Exception as err:
+        _LOGGER.warning(
+            "No se pudo abrir el modal de acceso: %s",
+            err,
+        )
+
+
 def _select_user_type(
     page,
     user_type: str,
@@ -318,6 +400,43 @@ def _select_user_type(
 
     if not wanted:
         return True
+
+    if wanted == "particular":
+
+        exact_selectors = [
+            "#radioParticularLoginDesktop",
+            'input[name$="_tipoUsuario"][value="PARTICULAR"]',
+            'input[type="radio"][value="PARTICULAR"]',
+        ]
+
+        for selector in exact_selectors:
+
+            try:
+                radio = page.locator(
+                    selector
+                )
+
+                if radio.count() > 0:
+                    target = radio.first
+
+                    if target.is_visible():
+                        try:
+                            target.check(
+                                timeout=5000
+                            )
+                        except Exception:
+                            target.click(
+                                timeout=5000
+                            )
+
+                        _LOGGER.info(
+                            "Tipo de usuario seleccionado mediante radio: PARTICULAR."
+                        )
+
+                        return True
+
+            except Exception:
+                continue
 
     try:
 
