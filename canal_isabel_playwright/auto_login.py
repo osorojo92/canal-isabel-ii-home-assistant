@@ -555,8 +555,8 @@ def _find_submit(
     password_field,
 ):
 
-    # Prioriza el submit del mismo formulario que contiene
-    # la contraseña para evitar botones ajenos (buscador, cookies, etc.).
+    # Canal usa type="button" en el botón real del formulario.
+    # Priorizamos el botón dentro del mismo <form>.
     try:
 
         form = password_field.locator(
@@ -565,65 +565,62 @@ def _find_submit(
 
         if form.count() > 0:
 
-            scoped = form.first.locator(
-                'button[type="submit"], input[type="submit"]'
-            )
+            scoped_selectors = [
+                "button.btn-login",
+                'button[aria-label="Entrar"]',
+                'button[title="Entrar"]',
+                'button[type="submit"]',
+                'input[type="submit"]',
+            ]
 
-            for index in range(
-                scoped.count()
-            ):
+            for selector in scoped_selectors:
 
-                candidate = scoped.nth(
-                    index
+                scoped = form.first.locator(
+                    selector
                 )
 
-                if candidate.is_visible():
-                    return candidate
+                for index in range(
+                    scoped.count()
+                ):
+
+                    candidate = scoped.nth(
+                        index
+                    )
+
+                    if candidate.is_visible():
+
+                        _LOGGER.info(
+                            "Botón de login localizado dentro del formulario: %s",
+                            selector,
+                        )
+
+                        return candidate
 
     except Exception:
         pass
 
-    submit = _first_visible(
+    exact = _first_visible(
+        page,
+        [
+            (
+                'form#_com_vass_cyii_ovir_login_module_loginForm '
+                'button.btn-login'
+            ),
+            'form[id$="_loginForm"] button.btn-login',
+            'button.btn-login[aria-label="Entrar"]',
+        ],
+    )
+
+    if exact is not None:
+        return exact
+
+    return _first_visible(
         page,
         [
             'button[type="submit"]',
             'input[type="submit"]',
         ],
     )
-
-    if submit is not None:
-        return submit
-
-    for text in (
-        "Acceder",
-        "Entrar",
-        "Iniciar sesión",
-        "Iniciar sesion",
-    ):
-
-        try:
-
-            candidate = page.get_by_role(
-                "button",
-                name=text,
-                exact=False,
-            )
-
-            for index in range(
-                candidate.count()
-            ):
-
-                button = candidate.nth(
-                    index
-                )
-
-                if button.is_visible():
-                    return button
-
-        except Exception:
-            continue
-
-    return None
 
 
 # ============================================================
