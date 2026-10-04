@@ -93,3 +93,12 @@ El add-on no llama a ningún servicio de notificación concreto ni depende de sc
 Si `auto_relogin: true` y el add-on se inicia con `mode: login`, se realiza un único intento automático de autenticación al abrir la página de Canal.
 
 El registro indica expresamente si el intento termina con `ÉXITO` o `SIN ÉXITO`. Si falla, no se repite en bucle: Chromium permanece visible para continuar manualmente desde noVNC. Este intento de `mode: login` es independiente del límite de un intento por incidencia utilizado por el modo automático.
+
+
+## Prueba limpia de credenciales en modo login
+
+Desde la versión 1.3.4, cuando `mode: login` y `auto_relogin: true`, el intento automático se realiza **sin reutilizar la sesión guardada**.
+
+Antes de probar las credenciales, el add-on elimina las cookies y el almacenamiento web del perfil de Chromium para esa prueba. No restaura `canal_session.json` ni `canal_session_storage.json`. El acceso se intenta exclusivamente con `username`, `password` y `user_type` de la configuración.
+
+Si el intento tiene éxito, la nueva sesión se guarda mediante el flujo normal. Si falla, el navegador permanece abierto para completar el login manualmente.

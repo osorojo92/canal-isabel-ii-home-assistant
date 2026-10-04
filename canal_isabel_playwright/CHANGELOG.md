@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.4] - 2026-10-04
+
+### Fixed
+
+- La prueba automática de `mode: login` ya no reutiliza cookies ni almacenamiento de la sesión persistente.
+- Antes del intento se limpian cookies, `localStorage`, `sessionStorage`, IndexedDB y cachés web del navegador.
+- El intento de `mode: login` utiliza exclusivamente `username`, `password` y `user_type` configurados en el add-on.
+- No se restauran `canal_session.json` ni `canal_session_storage.json` durante esta prueba.
+- Si el login automático funciona, la nueva sesión se detecta y guarda normalmente; si falla, el navegador permanece abierto para continuar manualmente.
+
 ## [1.3.3] - 2026-10-04
 
 ### Added

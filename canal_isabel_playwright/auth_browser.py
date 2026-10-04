@@ -37,9 +37,18 @@ AUTO_RELOGIN_ATTEMPT_MARKER = (
 # URL
 # ============================================================
 
+BASE_URL = (
+    "https://oficinavirtual.canaldeisabelsegunda.es"
+)
+
+LOGIN_URL = (
+    BASE_URL
+    + "/login"
+)
+
 CONSUMO_URL = (
-    "https://oficinavirtual.canaldeisabelsegunda.es/"
-    "group/ovir/consumo"
+    BASE_URL
+    + "/group/ovir/consumo"
 )
 
 
@@ -580,6 +589,139 @@ def page_is_authenticated(
 
 
 # ============================================================
+# PREPARAR LOGIN LIMPIO
+# ============================================================
+
+def prepare_clean_login_test(
+    context,
+    page,
+) -> None:
+    """
+    Prepara una prueba de login sin reutilizar la sesión guardada.
+
+    Se eliminan cookies y almacenamiento web del perfil persistente
+    antes de ejecutar el intento automático. No se leen ni restauran
+    canal_session.json ni canal_session_storage.json.
+    """
+
+    _LOGGER.info(
+        (
+            "Preparando prueba de login limpia: "
+            "se ignorará la sesión guardada."
+        )
+    )
+
+    try:
+
+        context.clear_cookies()
+
+        _LOGGER.info(
+            "Cookies del navegador eliminadas para la prueba."
+        )
+
+    except Exception as err:
+
+        _LOGGER.warning(
+            "No se pudieron limpiar las cookies: %s",
+            err,
+        )
+
+    try:
+
+        page.goto(
+            LOGIN_URL,
+            wait_until="domcontentloaded",
+            timeout=60000,
+        )
+
+    except Exception as err:
+
+        _LOGGER.warning(
+            (
+                "No se pudo abrir directamente la página "
+                "de login antes de limpiar storage: %s"
+            ),
+            err,
+        )
+
+    try:
+
+        page.evaluate(
+            """
+            async () => {
+                try {
+                    localStorage.clear();
+                } catch (e) {}
+
+                try {
+                    sessionStorage.clear();
+                } catch (e) {}
+
+                try {
+                    if (window.indexedDB && indexedDB.databases) {
+                        const databases = await indexedDB.databases();
+
+                        for (const db of databases) {
+                            if (db && db.name) {
+                                indexedDB.deleteDatabase(db.name);
+                            }
+                        }
+                    }
+                } catch (e) {}
+
+                try {
+                    if (window.caches) {
+                        const names = await caches.keys();
+
+                        for (const name of names) {
+                            await caches.delete(name);
+                        }
+                    }
+                } catch (e) {}
+            }
+            """
+        )
+
+        _LOGGER.info(
+            (
+                "localStorage, sessionStorage, IndexedDB y "
+                "cachés web limpiados para la prueba."
+            )
+        )
+
+    except Exception as err:
+
+        _LOGGER.warning(
+            (
+                "No se pudo limpiar completamente el "
+                "almacenamiento web: %s"
+            ),
+            err,
+        )
+
+    try:
+
+        context.clear_cookies()
+
+    except Exception:
+        pass
+
+    page.goto(
+        CONSUMO_URL,
+        wait_until="domcontentloaded",
+        timeout=60000,
+    )
+
+    _LOGGER.info(
+        (
+            "Prueba limpia preparada. El intento automático "
+            "usará exclusivamente usuario, contraseña y tipo "
+            "de usuario configurados en el add-on."
+        )
+    )
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -669,13 +811,6 @@ def main() -> None:
             )
 
 
-            page.goto(
-                CONSUMO_URL,
-                wait_until="domcontentloaded",
-                timeout=60000,
-            )
-
-
             # ------------------------------------------------
             # INTENTO AUTOMÁTICO ÚNICO EN MODE LOGIN
             # ------------------------------------------------
@@ -693,13 +828,18 @@ def main() -> None:
                     (
                         "Modo login con recuperación automática "
                         "activada: se realizará un único intento "
-                        "de autenticación automática."
+                        "con las credenciales configuradas."
                     )
+                )
+
+                prepare_clean_login_test(
+                    context,
+                    page,
                 )
 
                 result = attempt_auto_relogin(
                     page,
-                    "login_mode",
+                    "login_mode_clean_test",
                     ignore_attempt_marker=True,
                 )
 
@@ -746,6 +886,12 @@ def main() -> None:
                         "Recuperación automática desactivada "
                         "en mode login."
                     )
+                )
+
+                page.goto(
+                    CONSUMO_URL,
+                    wait_until="domcontentloaded",
+                    timeout=60000,
                 )
 
 
