@@ -102,3 +102,10 @@ Desde la versión 1.3.4, cuando `mode: login` y `auto_relogin: true`, el intento
 Antes de probar las credenciales, el add-on elimina las cookies y el almacenamiento web del perfil de Chromium para esa prueba. No restaura `canal_session.json` ni `canal_session_storage.json`. El acceso se intenta exclusivamente con `username`, `password` y `user_type` de la configuración.
 
 Si el intento tiene éxito, la nueva sesión se guarda mediante el flujo normal. Si falla, el navegador permanece abierto para completar el login manualmente.
+
+
+## Selectores específicos del login
+
+Desde la versión 1.3.5 el login automático prioriza selectores confirmados de la Oficina Virtual: `#btnEntrar` para abrir el modal, `#radioParticularLoginDesktop` para el perfil Particular, `#numeroDocumento` para el usuario, `#passwordFieldHidden` para la contraseña y `button.btn-login` dentro del formulario para enviar el acceso.
+
+Si aparece Cookiebot, el add-on selecciona `Solo usar cookies necesarias` antes de interactuar con el formulario para evitar que el banner intercepte los clics.
