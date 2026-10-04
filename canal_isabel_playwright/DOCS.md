@@ -86,3 +86,10 @@ actions:
 ```
 
 El add-on no llama a ningún servicio de notificación concreto ni depende de scripts personalizados del usuario.
+
+
+## Prueba automática en modo login
+
+Si `auto_relogin: true` y el add-on se inicia con `mode: login`, se realiza un único intento automático de autenticación al abrir la página de Canal.
+
+El registro indica expresamente si el intento termina con `ÉXITO` o `SIN ÉXITO`. Si falla, no se repite en bucle: Chromium permanece visible para continuar manualmente desde noVNC. Este intento de `mode: login` es independiente del límite de un intento por incidencia utilizado por el modo automático.

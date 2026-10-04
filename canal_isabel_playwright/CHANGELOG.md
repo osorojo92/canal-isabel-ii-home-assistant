@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.3] - 2026-10-04
+
+### Added
+
+- En `mode: login`, si `auto_relogin` está activado, el add-on realiza un único intento automático de autenticación al abrir el navegador.
+- El resultado del intento queda reflejado explícitamente en el registro como `ÉXITO` o `SIN ÉXITO`, sin mostrar credenciales.
+- Si el intento automático falla, el navegador permanece abierto para que el usuario continúe con el login manual.
+
+### Changed
+
+- El intento realizado en `mode: login` es independiente de la marca persistente usada para limitar los reintentos del modo automático; cambiar manualmente a `mode: login` permite una única prueba nueva al arrancar ese modo.
+
 ## [1.3.2] - 2026-10-04
 
 ### Fixed

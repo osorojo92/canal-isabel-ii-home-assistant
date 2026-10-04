@@ -10,6 +10,11 @@ from urllib.parse import urlsplit
 
 from playwright.sync_api import sync_playwright
 
+from auto_login import (
+    attempt_auto_relogin,
+    load_auto_relogin_options,
+)
+
 
 # ============================================================
 # RUTAS
@@ -671,10 +676,84 @@ def main() -> None:
             )
 
 
+            # ------------------------------------------------
+            # INTENTO AUTOMÁTICO ÚNICO EN MODE LOGIN
+            # ------------------------------------------------
+
+            auto_relogin_options = (
+                load_auto_relogin_options()
+            )
+
+            if auto_relogin_options.get(
+                "auto_relogin",
+                False,
+            ):
+
+                _LOGGER.info(
+                    (
+                        "Modo login con recuperación automática "
+                        "activada: se realizará un único intento "
+                        "de autenticación automática."
+                    )
+                )
+
+                result = attempt_auto_relogin(
+                    page,
+                    "login_mode",
+                    ignore_attempt_marker=True,
+                )
+
+                if result.get(
+                    "success",
+                    False,
+                ):
+
+                    _LOGGER.info(
+                        (
+                            "Intento automático en mode login: "
+                            "ÉXITO. La sesión se ha recuperado."
+                        )
+                    )
+
+                else:
+
+                    _LOGGER.warning(
+                        (
+                            "Intento automático en mode login: "
+                            "SIN ÉXITO (%s). %s"
+                        ),
+                        result.get(
+                            "reason",
+                            "unknown",
+                        ),
+                        result.get(
+                            "message",
+                            "Sin detalle.",
+                        ),
+                    )
+
+                    _LOGGER.info(
+                        (
+                            "El navegador permanecerá abierto "
+                            "para autenticación manual."
+                        )
+                    )
+
+            else:
+
+                _LOGGER.info(
+                    (
+                        "Recuperación automática desactivada "
+                        "en mode login."
+                    )
+                )
+
+
             _LOGGER.info(
                 (
                     "Navegador listo. "
-                    "Inicia sesión manualmente. "
+                    "Si no se ha autenticado automáticamente, "
+                    "inicia sesión manualmente. "
                     "Si aparece CAPTCHA, resuélvelo "
                     "en la interfaz web."
                 )

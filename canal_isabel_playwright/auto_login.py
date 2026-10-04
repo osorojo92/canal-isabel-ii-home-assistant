@@ -514,6 +514,7 @@ def _find_submit(
 def attempt_auto_relogin(
     page,
     trigger_reason: str,
+    ignore_attempt_marker: bool = False,
 ) -> dict:
     """
     Realiza como máximo un intento automático por incidencia.
@@ -537,7 +538,10 @@ def attempt_auto_relogin(
             ),
         }
 
-    if auto_relogin_already_attempted():
+    if (
+        auto_relogin_already_attempted()
+        and not ignore_attempt_marker
+    ):
 
         return {
             "success": False,
