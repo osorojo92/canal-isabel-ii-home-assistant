@@ -717,9 +717,19 @@ def attempt_auto_relogin(
         )
     )
 
+    _dismiss_cookie_banner(
+        page
+    )
+
+    _ensure_login_form_visible(
+        page
+    )
+
     password_field = _first_visible(
         page,
         [
+            "#passwordFieldHidden",
+            'input[name$="_password"]',
             'input[type="password"]',
         ],
     )
@@ -737,6 +747,8 @@ def attempt_auto_relogin(
             if form.count() > 0:
 
                 selectors = [
+                    "#numeroDocumento",
+                    'input[name$="_numeroDocumento"]',
                     'input[autocomplete="username"]',
                     'input[name*="usuario"]',
                     'input[id*="usuario"]',
@@ -779,6 +791,8 @@ def attempt_auto_relogin(
         username_field = _first_visible(
             page,
             [
+                "#numeroDocumento",
+                'input[name$="_numeroDocumento"]',
                 'input[autocomplete="username"]',
                 'input[name*="usuario"]',
                 'input[id*="usuario"]',
@@ -901,11 +915,17 @@ def attempt_auto_relogin(
 
     try:
 
+        _dismiss_cookie_banner(
+            page
+        )
+
         _LOGGER.info(
             "Enviando formulario de autenticación."
         )
 
-        submit.click()
+        submit.click(
+            timeout=10000
+        )
 
     except Exception as err:
 
